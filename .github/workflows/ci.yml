@@ -49,4 +49,4 @@ jobs:
         run: python scripts/validate-release.py
 
       - name: Build sidecar image
-        run: docker build -f apps/paper-digest/Dockerfile -t wikillm-paper-digest:ci .
+        run: docker build -t wikillm-paper-digest:ci apps/paper-digest
