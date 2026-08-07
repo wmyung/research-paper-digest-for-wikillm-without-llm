@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/firecrawl-paper-digest-response.schema.json",
+  "title": "Deterministic paper digest response",
+  "type": "object",
+  "required": ["success", "status", "filename", "metadata", "qa", "markdown"],
+  "additionalProperties": false,
+  "properties": {
+    "success": { "type": "boolean" },
+    "status": { "type": "string", "enum": ["SOURCE_READY", "NOT_SOURCE_READY"] },
+    "filename": { "type": "string", "pattern": "\\.md$" },
+    "markdown": { "type": "string" },
+    "metadata": {
+      "type": "object",
+      "required": ["title", "authorship", "doi", "journal", "article_type", "research_fields", "index_keywords", "category"],
+      "properties": {
+        "title": { "type": "string" },
+        "authorship": {
+          "type": "object",
+          "required": ["authors", "corresponding", "equal_contributors", "joint_supervisors"],
+          "properties": {
+            "authors": { "type": "array", "items": { "type": "string" } },
+            "group_authors": { "type": "array", "items": { "type": "string" } },
+            "corresponding": { "type": "array", "items": { "type": "string" } },
+            "equal_contributors": { "type": "array", "items": { "type": "string" } },
+            "joint_supervisors": { "type": "array", "items": { "type": "string" } },
+            "author_count": { "type": ["integer", "null"], "minimum": 0 },
+            "representation_note": { "type": "string" }
+          }
+        },
+        "year": { "type": ["integer", "null"] },
+        "doi": { "type": "string" },
+        "journal": { "type": "string" },
+        "volume": { "type": "string" },
+        "issue": { "type": "string" },
+        "pages_or_article": { "type": "string" },
+        "online_date": { "type": "string" },
+        "issue_date": { "type": "string" },
+        "received_date": { "type": "string" },
+        "accepted_date": { "type": "string" },
+        "article_type": { "type": "string" },
+        "license": { "type": "string" },
+        "author_keywords": { "type": "array", "items": { "type": "string" } },
+        "research_fields": { "type": "array", "items": { "type": "string" } },
+        "index_keywords": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "metadata_sources": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "required": ["source_ready", "quality_score", "errors", "warnings", "checks", "input_inventory", "coverage"]
+    }
+  }
+}

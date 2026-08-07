@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/firecrawl-paper-digest-options.schema.json",
+  "title": "Deterministic paper digest options",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "profile": {
+      "type": "string",
+      "enum": ["auto", "universal", "generic"],
+      "default": "auto"
+    },
+    "strict": { "type": "boolean", "default": true },
+    "source_collection": { "type": "string", "minLength": 1, "default": "publisher-pdf" },
+    "pdf_path": { "type": ["string", "null"] },
+    "extracted_date": {
+      "type": ["string", "null"],
+      "pattern": "^$|^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "fail_on_missing_supplement": { "type": "boolean", "default": false },
+    "source_ready_threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.95 },
+    "enable_doi_metadata": { "type": "boolean", "default": true }
+  }
+}

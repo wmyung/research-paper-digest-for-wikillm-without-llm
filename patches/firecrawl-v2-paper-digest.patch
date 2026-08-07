@@ -1,0 +1,24 @@
+diff --git a/apps/api/src/routes/v2.ts b/apps/api/src/routes/v2.ts
+--- a/apps/api/src/routes/v2.ts
++++ b/apps/api/src/routes/v2.ts
+@@
+ import {
+   parseController,
+   parseMultipartPayloadMiddleware,
+ } from "../controllers/v2/parse";
++import {
++  paperDigestController,
++  paperDigestUploadMiddleware,
++} from "../controllers/v2/paper-digest";
+@@
++v2Router.post(
++  "/paper-digest",
++  authMiddleware(RateLimiterMode.Scrape, { allowKeyless: true }),
++  countryCheck,
++  checkCreditsMiddleware(1),
++  paperDigestUploadMiddleware,
++  wrap(paperDigestController),
++);
++
+ v2Router.post(
+   "/parse/upload-url",

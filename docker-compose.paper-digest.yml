@@ -1,0 +1,40 @@
+services:
+  api:
+    environment:
+      PAPER_DIGEST_SERVICE_URL: ${PAPER_DIGEST_SERVICE_URL:-http://paper-digest:8088/v1/digest}
+      PAPER_DIGEST_TIMEOUT_MS: ${PAPER_DIGEST_TIMEOUT_MS:-300000}
+    depends_on:
+      paper-digest:
+        condition: service_healthy
+
+  paper-digest:
+    build:
+      context: ./apps/paper-digest
+    environment:
+      PORT: 8088
+      PYTHONUNBUFFERED: "1"
+    expose:
+      - "8088"
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/health', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  backend: {}
