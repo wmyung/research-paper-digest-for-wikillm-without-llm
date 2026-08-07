@@ -25,6 +25,35 @@ data, personal examples, credentials, or user-specific fixtures.
 
 ---
 
+## Why This Is Needed: Stop Paying an LLM for Every Paper
+
+Using an LLM to digest papers one at a time has two compounding costs. Every
+long PDF, supplement, retry, and validation pass consumes more tokens, while
+serial inference, rate limits, model queues, and network round trips make large
+collections slow to ingest. The same corpus can also produce different source
+records after a model or prompt change.
+
+WikiLLM Paper Digest moves that repetitive ingestion stage to a deterministic,
+local compiler. It uses **zero LLM tokens**, can run offline, supports parallel
+and batch execution, and produces the same Markdown contract through CLI, web,
+MCP, and Firecrawl. The machine-readable QA report and page evidence ledger make
+each accepted record auditable before it enters WikiLLM.
+
+| Per-paper LLM digestion | WikiLLM Paper Digest |
+|---|---|
+| Token cost grows with pages, supplements, and retries | Zero LLM-token cost for PDF ingestion |
+| Inference queues and API round trips slow large batches | Local deterministic processing; parallelizable |
+| Output can drift with prompts and model versions | Reproducible rules, schema, and hard gates |
+| Validation often requires another model pass | Built-in 0.95 fail-closed QA and BM25 regression |
+
+This does not pretend that rules can make unsupported semantic judgments. It
+extracts and validates source-grounded records, fails visibly when evidence is
+insufficient, and reserves expensive LLM work for tasks where it adds more
+value: cross-paper synthesis, hypothesis generation, and genuinely ambiguous
+review.
+
+---
+
 ## Three Ways to Use It
 
 | User | Interface | Command or endpoint |

@@ -253,8 +253,53 @@ def evaluate_digest(
     evidence = evidence or []
     checks["evidence_ledger_entries"] = len(evidence)
     checks["evidence_pages"] = sorted({int(item["page_start"]) for item in evidence if item.get("page_start")})
+    incomplete_evidence = [
+        index + 1
+        for index, item in enumerate(evidence)
+        if not re.search(r"[.!?][)\]\"'’]*$", str(item.get("statement", "")).strip())
+    ]
+    caption_evidence = [
+        index + 1
+        for index, item in enumerate(evidence)
+        if re.search(
+            r"(?:^this figure\b|^the (?:black|dashed|solid|red|blue|horizontal|vertical) line\b|"
+            r"^error bars?\b|^venn diagrams? depicting\b|included in this figure\b)",
+            str(item.get("statement", "")).strip(),
+            re.I,
+        )
+    ]
+    checks["incomplete_evidence_statements"] = incomplete_evidence
+    checks["caption_evidence_statements"] = caption_evidence
+    authorship_evidence = [
+        index + 1
+        for index, item in enumerate(evidence)
+        if re.search(r"credit authorship contribution statement", str(item.get("statement", "")), re.I)
+    ]
+    fused_subheading_evidence = [
+        index + 1
+        for index, item in enumerate(evidence)
+        if re.search(
+            r"(?:^|[.!?]\s+)[A-Z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){1,9}\s+"
+            r"(?i:analysis|analyses|correlation|disorders|genes|heritability|oc|overlap|pathways|results)\s+"
+            r"(?=[A-Z])",
+            str(item.get("statement", "")),
+        )
+    ]
+    checks["authorship_evidence_statements"] = authorship_evidence
+    checks["fused_subheading_evidence_statements"] = fused_subheading_evidence
+    checks["soft_hyphen_count"] = body.count("\u00ad")
     if len(evidence) < 12:
         errors.append("Too few page-grounded evidence units were retained in the QA ledger.")
+    if incomplete_evidence:
+        errors.append("One or more selected evidence statements end at an incomplete PDF text boundary.")
+    if caption_evidence:
+        errors.append("Figure-caption layout fragments leaked into selected scientific evidence.")
+    if authorship_evidence:
+        errors.append("Publisher authorship boilerplate leaked into selected scientific evidence.")
+    if fused_subheading_evidence:
+        errors.append("Publisher subheadings remain fused to selected scientific evidence.")
+    if checks["soft_hyphen_count"]:
+        errors.append("Soft-hyphen extraction artifacts remain in the source Markdown.")
 
     # Weighted score is descriptive; every hard error remains fail-closed.
     weights = {

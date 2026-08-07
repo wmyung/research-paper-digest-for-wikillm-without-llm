@@ -8,6 +8,7 @@ from collections.abc import Iterable
 SPACE_RE = re.compile(r"[\t\u00a0\u2000-\u200b]+")
 MULTISPACE_RE = re.compile(r" {2,}")
 TOKEN_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9'’\-]*\b")
+SOFT_HYPHEN_MARKER = "\ue000"
 ABBREVIATIONS = {
     "e.g.",
     "i.e.",
@@ -38,7 +39,9 @@ ABBREVIATIONS = {
 
 def normalize_unicode(text: str) -> str:
     text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"(?<=[A-Za-z])\u00ad\s*(?=[a-z])", "", text)
     replacements = {
+        "\u00ad": "",
         "−": "-",
         "–": "-",
         "—": "—",
@@ -55,6 +58,9 @@ def normalize_unicode(text: str) -> str:
 
 
 def clean_line(text: str) -> str:
+    # Preserve a discretionary hyphen at a line end until adjacent PDF lines
+    # are rejoined by normalize_prose().
+    text = text.replace("\u00ad", SOFT_HYPHEN_MARKER)
     text = html.unescape(normalize_unicode(text))
     text = SPACE_RE.sub(" ", text)
     text = MULTISPACE_RE.sub(" ", text)
@@ -67,9 +73,12 @@ def dehyphenate(text: str) -> str:
 
 
 def normalize_prose(text: str) -> str:
+    text = re.sub(rf"(?<=[A-Za-z]){SOFT_HYPHEN_MARKER}\s*(?=[a-z])", "", text)
+    text = text.replace(SOFT_HYPHEN_MARKER, "")
     text = normalize_unicode(text)
     text = dehyphenate(text)
     text = re.sub(r"\s*\n\s*", " ", text)
+    text = re.sub(r"\b(low|high|mid|short|long|moderate)-to\s*([a-z])", r"\1-to-\2", text, flags=re.I)
     text = re.sub(r"([A-Za-z]{2,})-\s+([a-z]{2,})", r"\1\2", text)
     text = re.sub(r"([A-Za-z0-9])-\s+([A-Z0-9])", r"\1-\2", text)
     text = SPACE_RE.sub(" ", text)

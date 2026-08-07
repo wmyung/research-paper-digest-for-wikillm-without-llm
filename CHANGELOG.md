@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.1
+
+- Documented the primary economic and throughput case for deterministic paper
+  ingestion: zero per-paper LLM-token cost and no inference queue latency.
+- Repaired discretionary PDF line-break hyphens without changing real
+  compounds.
+- Added fail-closed detection for caption fragments, publisher subheadings,
+  authorship boilerplate, incomplete statistics, and soft-hyphen artifacts.
+- Added generic extraction-quality regression tests based only on synthetic
+  text.
+
 ## 1.3.0
 
 - Named the project WikiLLM Paper Digest and documented the

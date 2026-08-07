@@ -1,0 +1,52 @@
+name: wikillm-paper-digest-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/paper-digest/requirements.lock
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Python dependencies
+        run: python -m pip install -e "apps/paper-digest[dev]"
+
+      - name: Install TypeScript validation dependencies
+        run: npm ci
+
+      - name: Compile Python
+        run: python -m compileall -q apps/paper-digest/src tests
+
+      - name: Lint Python
+        run: ruff check --config apps/paper-digest/pyproject.toml apps/paper-digest/src tests scripts
+
+      - name: Check Python formatting
+        run: ruff format --check --config apps/paper-digest/pyproject.toml apps/paper-digest/src tests scripts
+
+      - name: Audit no-LLM runtime boundary
+        run: python scripts/no-llm-audit.py .
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Validate release contract
+        run: python scripts/validate-release.py
+
+      - name: Build sidecar image
+        run: docker build -f apps/paper-digest/Dockerfile -t wikillm-paper-digest:ci .

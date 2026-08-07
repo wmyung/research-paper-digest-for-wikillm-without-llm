@@ -147,7 +147,8 @@ TARGET_RULES = {
 NOISE_RE = re.compile(
     r"creative commons|correspondence:|@|department of|university|all rights reserved|"
     r"publisher'?s note|supplementary information is available|^https?://|^research\s+open\s+access|"
-    r"science\+business media|published by .*?(?:sons|press|publishing)|sage publications",
+    r"science\+business media|published by .*?(?:sons|press|publishing)|sage publications|"
+    r"credit authorship contribution statement",
     re.I,
 )
 NUMERIC_RE = re.compile(r"\b(?:n\s*=|p\s*[<=>]|\d+(?:\.\d+)?%|\d+\.\d+|95%\s*ci|odds ratio|hazard ratio)\b", re.I)
@@ -156,6 +157,63 @@ SELF_REFERENCE_RE = re.compile(
 )
 TABLE_FRAGMENT_RE = re.compile(r"\b(?:table|fig(?:ure)?\.?|χ\s*2|critical ratio|standard error)\b", re.I)
 LAYOUT_NOISE_RE = re.compile(r"[A-Za-z]{25,}|\buntreated period\b|\bforest plot\b", re.I)
+CAPTION_SENTENCE_RE = re.compile(
+    r"^(?:fig(?:ure)?\.?\s*\d+|table\s*\d+|this figure\b|"
+    r"the threshold for significance\b|"
+    r"the (?:black|dashed|solid|red|blue|horizontal|vertical) line\b|"
+    r"error bars?\b|venn diagrams? depicting\b|included in this figure\b|"
+    r"[a-f]\.\s+(?:the|each|association|results?)\b)",
+    re.I,
+)
+INLINE_LABEL_ENDINGS = {
+    "analysis",
+    "analyses",
+    "architecture",
+    "availability",
+    "control",
+    "correlation",
+    "correlations",
+    "disorder",
+    "disorders",
+    "genes",
+    "heritability",
+    "oc",
+    "overlap",
+    "pathways",
+    "phenotyping",
+    "population",
+    "results",
+    "scoring",
+}
+
+
+def _strip_inline_label(sentence: str) -> str:
+    """Remove a short publisher subheading fused to the first sentence."""
+    first_word = re.match(r"([A-Z][A-Za-z0-9-]*)\b", sentence)
+    if first_word:
+        tail = sentence[first_word.end() :]
+        repeated = re.search(rf"\s+(?={re.escape(first_word.group(1))}\b)", tail)
+        if repeated:
+            cut = first_word.end() + repeated.start()
+            prefix = sentence[:cut]
+            if word_count(prefix) <= 12 and not re.search(r"[.;:!?]", prefix):
+                return sentence[cut:].strip()
+
+    for match in re.finditer(r"\s+(?=[A-Z][A-Za-z0-9-]*\b)", sentence):
+        prefix = sentence[: match.start()].strip()
+        words = re.findall(r"[A-Za-z][A-Za-z-]*", prefix)
+        if not 1 <= len(words) <= 10 or re.search(r"[.;:!?]", prefix):
+            continue
+        if words[-1].casefold() in INLINE_LABEL_ENDINGS:
+            return sentence[match.end() :].strip()
+
+    endings = "|".join(sorted(INLINE_LABEL_ENDINGS, key=len, reverse=True))
+    sentence = re.sub(
+        rf"(?<=[.!?])\s+[A-Z][A-Za-z0-9-]*(?:\s+[A-Za-z][A-Za-z0-9-]*){{0,9}}\s+(?:{endings})\s+(?=[A-Z])",
+        " ",
+        sentence,
+    )
+    return sentence
 
 
 def _sentences(bundle: ParsedBundle) -> list[Candidate]:
@@ -174,6 +232,7 @@ def _sentences(bundle: ParsedBundle) -> list[Candidate]:
                     sentence,
                     flags=re.I,
                 )
+                sentence = _strip_inline_label(sentence)
                 marker = re.search(
                     r"\b(?:Table\s+\d+|Fig(?:ure)?\.?\s*\d+|Est unstandardized model estimate|SE Critical Ratio)\b",
                     sentence,
@@ -184,7 +243,19 @@ def _sentences(bundle: ParsedBundle) -> list[Candidate]:
                 elif marker and marker.start() < 20:
                     continue
                 count = word_count(sentence)
-                if count < 8 or count > 105 or NOISE_RE.search(sentence) or LAYOUT_NOISE_RE.search(sentence):
+                if (
+                    count < 8
+                    or count > 105
+                    or NOISE_RE.search(sentence)
+                    or LAYOUT_NOISE_RE.search(sentence)
+                    or CAPTION_SENTENCE_RE.search(sentence)
+                    or "included in this figure" in sentence.casefold()
+                    or not re.match(r"^[A-Z0-9(\[]", sentence)
+                    or re.search(r"\s+[a-f]\.\s*$", sentence, re.I)
+                    or re.search(r",\s*[A-Z]{1,4}\.\s*$", sentence)
+                    or re.search(r"\b(?:FDR|P|CI|OR|HR|r[_ ]?g)\s*[<=>]\s+(?=[A-Z])", sentence)
+                    or not re.search(r"[.!?][)\]\"'’]*$", sentence)
+                ):
                     continue
                 number_count = len(re.findall(r"(?<![A-Za-z])[-+]?\d+(?:\.\d+)?%?", sentence))
                 if number_count >= 9 and (TABLE_FRAGMENT_RE.search(sentence) or number_count / max(1, count) > 0.22):
