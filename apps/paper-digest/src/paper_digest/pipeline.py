@@ -151,6 +151,7 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
                 evidence=content.evidence,
                 retrieval_queries=content.retrieval_queries,
                 coverage=getattr(profile, "coverage", {}),
+                section_capacity=getattr(profile, "section_capacity", {}),
                 document_profile=bundle.metadata.document_profile,
                 metadata_ledger=metadata_ledger(bundle),
                 authored=content.authored,

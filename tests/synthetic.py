@@ -90,90 +90,174 @@ class SyntheticPaper:
                 "1. Introduction",
                 (
                     "Systematic collections of research articles increasingly feed retrieval systems that "
-                    "answer questions directly from source records. Previous work reported that naive text "
-                    "extraction reorders two-column pages and fuses table cells into running prose, and "
-                    "earlier studies have shown that such defects propagate silently into downstream indexes.",
+                    "answer questions directly from source records, and the quality of those answers is "
+                    "bounded by the quality of the extraction that produced them. Previous work reported "
+                    "that naive text extraction reorders two-column pages and fuses table cells into "
+                    "running prose, and earlier studies have shown that such defects propagate silently "
+                    "into downstream indexes, where they are far harder to detect than at ingestion time.",
                     "Existing methods rely on the order in which glyphs happen to appear in the content "
-                    "stream. In contrast, layout-aware analysis recovers column boundaries before reading "
-                    "order is fixed. We aimed to quantify how much that difference matters for the "
-                    "bibliographic fields a retrieval index depends on.",
+                    "stream of a document. That order reflects how the typesetting software emitted the "
+                    "page, not how a reader traverses it. In contrast, layout-aware analysis recovers "
+                    "column boundaries before reading order is fixed, so a sentence that continues across "
+                    "a column break is reassembled rather than interleaved with its neighbour. We aimed to "
+                    "quantify how much that difference matters for the bibliographic fields a retrieval "
+                    "index depends on, and for the body prose those indexes actually return.",
                     "Reporting of extraction quality has itself been inconsistent. Other studies have "
                     "described accuracy on a single publisher or a single field, which makes results hard "
-                    "to compare across pipelines. We therefore prespecified a field-level outcome and "
-                    "applied it uniformly across the corpus.",
+                    "to compare across pipelines, and several report only aggregate character error rates "
+                    "that obscure whether the title or the author list was the field that failed. We "
+                    "therefore prespecified a field-level outcome and applied it uniformly across the "
+                    "corpus, so that a reader can see which field each pipeline loses and under which "
+                    "layout conditions the loss occurs.",
                     "The objective of this study was to estimate the difference in field-level accuracy "
                     "between a layout-aware deterministic pipeline and a text-order baseline, and to "
-                    "identify the document properties under which the difference is largest.",
+                    "identify the document properties under which the difference is largest. A secondary "
+                    "objective was to characterise the residual error of the better pipeline, because a "
+                    "residual that concentrates in one document class can be addressed operationally "
+                    "while one that is spread evenly cannot.",
+                    "We present three contributions. We developed a column-recovery procedure that needs "
+                    "no trained model and runs in under two seconds per article, we introduce a "
+                    "field-level accuracy (FLA) outcome that is comparable across publishers because it "
+                    "is defined per field rather than per character, and we show that the remaining "
+                    "errors concentrate in documents without a usable text layer rather than being "
+                    "distributed across the corpus.",
                 ),
             ),
             (
                 "2. Methods",
                 (
                     "We assembled a corpus of 412 open-access articles from nine publishers, stratified by "
-                    "layout so that single-column and two-column designs were equally represented. Two "
-                    "reviewers independently curated reference values for title, ordered author list, "
-                    "journal, digital object identifier and publication date, resolving disagreements by "
-                    "discussion.",
+                    "layout so that single-column and two-column designs were equally represented. "
+                    "Articles were eligible if the publisher deposited a born-digital version with an "
+                    "embedded text layer and if the record carried a resolvable digital object identifier "
+                    "(DOI). Two reviewers independently curated reference values for title, ordered "
+                    "author list, journal, DOI and publication date, resolving disagreements by "
+                    "discussion and recording the reason for each resolution.",
                     "Participants in the annotation study were 12 research librarians recruited from four "
-                    "institutions. Each record was measured twice, and we adjusted for publisher and page "
-                    "count using a mixed-effects logistic regression model fitted with restricted maximum "
-                    "likelihood. Analyses were performed with a prespecified protocol registered before "
-                    "data collection began.",
-                    "The primary outcome was field-level accuracy, defined as exact string agreement after "
-                    "Unicode normalisation. Secondary outcomes were ordered-author-list accuracy and the "
-                    "proportion of records whose body prose contained at least one table fragment.",
+                    "institutions. Each record was measured twice, at least two weeks apart, and we "
+                    "adjusted for publisher and page count using a mixed-effects logistic regression "
+                    "(MELR) model fitted with restricted maximum likelihood (REML). Publisher was entered "
+                    "as a random intercept because layout conventions cluster within publisher. Analyses "
+                    "were performed with a prespecified protocol registered before data collection began, "
+                    "and no outcome was added after the corpus was assembled.",
+                    "The primary outcome was field-level accuracy, defined as exact string agreement "
+                    "after Unicode normalisation, case folding of the journal name, and removal of "
+                    "trailing punctuation. Secondary outcomes were ordered-author-list accuracy, which "
+                    "required both the set and the order of names to match, and the proportion of records "
+                    "whose body prose contained at least one table fragment. A table fragment was defined "
+                    "as a run of at least five words that appeared inside a detected table region on the "
+                    "rendered page.",
+                    "Column boundaries were recovered from an x-coverage histogram computed over every "
+                    "text block on a page, with each block contributing its height to every horizontal "
+                    "bin it spans. Runs of low coverage that spanned most of the page height were treated "
+                    "as gutters, and the bands between them as columns. Blocks covering two or more bands "
+                    "were emitted before the columns they interrupt, which reproduces the way a reader "
+                    "handles a figure that spans the page.",
+                    "Running heads were identified by cross-page recurrence after masking digits, so that "
+                    "page numbers and dates did not defeat the match. A block recurring on at least 40 "
+                    "per cent of pages in the top or bottom band was treated as furniture and excluded "
+                    "from prose, and the recurring text was retained separately because it frequently "
+                    "carries the journal name. Isolated page numbers were removed regardless of "
+                    "recurrence.",
+                    "Body text size was estimated in two passes. The first pass took the character "
+                    "weighted modal size across the document, which is biased toward whichever of "
+                    "references and tables occupies the most characters. The second pass re-estimated the "
+                    "size from blocks the first pass had classified as body prose, and the page was then "
+                    "classified again. This matters because the separation of display matter from prose "
+                    "is expressed relative to the running-text size.",
                     "Sensitivity analyses repeated the primary comparison after excluding scanned "
                     "supplements, and after restricting the corpus to articles published within the last "
                     "five years. A prespecified subgroup analysis examined two-column and single-column "
-                    "layouts separately.",
-                    "Software and data are available under an open licence. The analysis code is deposited "
-                    "in a public repository and the annotation spreadsheets are available from the "
-                    "corresponding author on reasonable request.",
+                    "layouts separately, and a post-hoc analysis examined records carrying a repository "
+                    "cover sheet, because those had been identified during piloting as a distinct failure "
+                    "mode.",
+                    "Inter-rater reliability was summarised with the intraclass correlation coefficient "
+                    "(ICC) using a two-way random-effects model for absolute agreement. Software and data "
+                    "are available under an open licence. The analysis code is deposited in a public "
+                    "repository and the annotation spreadsheets are available from the corresponding "
+                    "author on reasonable request. No identifiable data were collected from the "
+                    "annotators beyond their institutional affiliation.",
                 ),
             ),
             (
                 "3. Results",
                 (
-                    "Field accuracy was 94.1% for the layout-aware pipeline and 71.8% for the baseline, a "
-                    "difference of 22.3 percentage points (95% CI 19.4 to 25.2, P < 0.001). Ordered "
-                    "author-list accuracy was 91.7% versus 63.2% (P < 0.001).",
-                    "Accuracy did not differ between two-column and single-column layouts (94.4% versus "
-                    "93.8%, P = 0.41), and no significant interaction with publisher was detected. Table "
-                    "fragments contaminated 0.7% of layout-aware records compared with 18.9% of baseline "
-                    "records.",
-                    "Among the 24 records that remained incorrect, 19 were scanned supplements without a "
-                    "text layer, and the remaining 5 carried a repository cover sheet that the baseline "
-                    "treated as the article front matter.",
+                    "Field accuracy was 94.1 per cent for the layout-aware pipeline and 71.8 per cent for "
+                    "the baseline, a difference of 22.3 percentage points (95 per cent confidence interval "
+                    "(CI) 19.4 to 25.2, P < 0.001). Ordered author-list accuracy was 91.7 per cent versus "
+                    "63.2 per cent (P < 0.001), and the gap was widest for bylines carrying superscript "
+                    "affiliation markers, where the baseline retained the marker characters inside the "
+                    "surname.",
+                    "Accuracy did not differ between two-column and single-column layouts for the "
+                    "layout-aware pipeline (94.4 per cent versus 93.8 per cent, P = 0.41), and no "
+                    "significant interaction with publisher was detected. The baseline, by contrast, lost "
+                    "14.6 percentage points moving from single-column to two-column layouts, which is the "
+                    "difference the column-recovery step is intended to remove. Table fragments "
+                    "contaminated 0.7 per cent of layout-aware records compared with 18.9 per cent of "
+                    "baseline records.",
+                    "Among the 24 records that remained incorrect under the layout-aware pipeline, 19 "
+                    "were scanned supplements without a text layer, and the remaining 5 carried a "
+                    "repository cover sheet that the baseline treated as the article front matter. "
+                    "Optical character recognition (OCR) recovered text for 14 of those 19 supplements at "
+                    "reduced accuracy, and the 5 cover-sheet records were corrected once cover-sheet "
+                    "detection was enabled.",
                     "Median processing time was 1.8 seconds per article for the layout-aware pipeline "
                     "compared with 0.6 seconds for the baseline, a difference that did not affect "
-                    "throughput at the corpus scale evaluated here.",
-                    "Publication-date accuracy improved from 66.4% to 92.9%, and journal-name accuracy "
-                    "from 74.5% to 96.2%. Digital object identifier accuracy was high for both pipelines "
-                    "(98.8% versus 99.3%, P = 0.22).",
+                    "throughput at the corpus scale evaluated here. The additional time was dominated by "
+                    "the second body-size estimation pass, which required a full re-classification of "
+                    "every page.",
+                    "Publication-date accuracy improved from 66.4 per cent to 92.9 per cent, and "
+                    "journal-name accuracy from 74.5 per cent to 96.2 per cent. The journal-name gain "
+                    "came almost entirely from reading the running head when the opening page carried no "
+                    "masthead. Digital object identifier accuracy was high for both pipelines (98.8 per "
+                    "cent versus 99.3 per cent, P = 0.22), which is expected because a DOI is a "
+                    "distinctive string that survives reordering.",
+                    "Inter-rater reliability was high for every curated field (ICC 0.94, 95 per cent CI "
+                    "0.91 to 0.96). Disagreements concentrated on hyphenated surnames and on journal "
+                    "names that differ between the masthead and the running head, and in both cases the "
+                    "resolution rule was recorded before the comparison was run.",
+                    "Excluding scanned supplements raised layout-aware accuracy to 97.6 per cent and "
+                    "baseline accuracy to 74.9 per cent, so the difference between pipelines widened "
+                    "rather than narrowed under that restriction. Restricting the corpus to the last five "
+                    "years produced an almost identical estimate (22.1 percentage points, 95 per cent CI "
+                    "18.7 to 25.5), indicating that the result is not driven by older typesetting.",
                 ),
             ),
             (
                 "4. Discussion",
                 (
-                    "These results are consistent with prior reports that extraction defects concentrate at "
-                    "column boundaries and table margins. Other studies have proposed learned page "
+                    "These results are consistent with prior reports that extraction defects concentrate "
+                    "at column boundaries and table margins. Other studies have proposed learned page "
                     "segmentation, but the deterministic approach evaluated here reaches comparable "
-                    "accuracy without a model.",
+                    "accuracy without a model, without training data, and without the version drift that "
+                    "a learned component introduces into a reproducible pipeline.",
                     "A limitation is that the corpus covered nine publishers and may not generalise to "
-                    "layouts outside that sample. We could not measure accuracy on paywalled articles, and "
-                    "residual confounding by publication year cannot be excluded. Future research should "
-                    "extend the evaluation to scanned archives.",
+                    "layouts outside that sample. We could not measure accuracy on paywalled articles "
+                    "because redistribution was not permitted, and residual confounding by publication "
+                    "year cannot be excluded even though the restricted analysis was concordant. Future "
+                    "research should extend the evaluation to scanned archives, where the failure mode is "
+                    "different in kind rather than in degree.",
                     "A further limitation is that annotation used exact string agreement, which penalises "
-                    "acceptable typographic variants. We did not assess semantic equivalence, so the "
-                    "reported accuracies are conservative for both pipelines.",
+                    "acceptable typographic variants such as an en dash standing in for a hyphen. We did "
+                    "not assess semantic equivalence, so the reported accuracies are conservative for "
+                    "both pipelines. The librarian annotators were recruited from four institutions in "
+                    "one country, and their conventions for transliterating names may not transfer to "
+                    "corpora dominated by other scripts.",
+                    "Because the corpus was assembled from open-access articles, the findings may not "
+                    "hold for publishers whose typesetting differs systematically from open-access "
+                    "practice. Causality cannot be inferred from this design, and the comparison reflects "
+                    "one baseline implementation rather than text-order extraction in general; a "
+                    "different baseline with its own heuristics could close part of the gap without "
+                    "recovering columns at all.",
                 ),
             ),
             (
                 "5. Conclusion",
                 (
                     "A layout-aware deterministic pipeline recovers publisher metadata substantially more "
-                    "accurately than a text-order baseline, and the errors that remain are concentrated in "
-                    "documents without a usable text layer.",
+                    "accurately than a text-order baseline, and the errors that remain are concentrated "
+                    "in documents without a usable text layer rather than spread across the corpus. That "
+                    "concentration is what makes the residual tractable operationally.",
                 ),
             ),
         )

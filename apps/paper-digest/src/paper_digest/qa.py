@@ -11,10 +11,12 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .compiler import FRONTMATTER_KEYS, REQUIRED_HEADINGS
 from .config import DigestConfig
+from .documents import PROFILES_BY_KEY
 from .grounding import audit as grounding_audit
 from .grounding import prose_sentences
 from .models import ParsedBundle
@@ -95,6 +97,7 @@ class QAContext:
     coverage: dict[str, Any]
     document_profile: str
     metadata_ledger: list[dict[str, Any]]
+    section_capacity: dict[str, int] = field(default_factory=dict)
     authored: list[str] = field(default_factory=list)
     frontmatter_order: list[str] = field(default_factory=list)
     frontmatter: dict[str, str] = field(default_factory=dict)
@@ -209,22 +212,59 @@ def check_metadata(context: QAContext) -> CheckResult:
     return result
 
 
+COMPACT_AUTHOR_RE = re.compile(r"\bet al\.?\b|\.\.\.|…|additional authors?|remaining authors?", re.I)
+
+
 def check_authors(context: QAContext) -> CheckResult:
     result = CheckResult("authors")
     meta = context.bundle.metadata
     count = len(meta.authorship.authors)
+    rendered = context.frontmatter.get("authors", "")
+    compacted = bool(COMPACT_AUTHOR_RE.search(rendered))
     result.measurements["author_count"] = count
+    result.measurements["author_list_compacted"] = compacted
+    # The complete extracted list always survives in the sidecar, even when the
+    # frontmatter is compacted.
+    result.measurements["full_author_list"] = list(meta.authorship.authors)
     if count == 0:
         result.errors.append("No ordered author list was resolved.")
-    if count <= context.config.max_authors_full and re.search(
-        r"\bet al\.\b|\.\.\.|…", context.frontmatter.get("authors", ""), re.I
-    ):
-        result.errors.append("The full author list is required for papers at or below the configured threshold.")
+    if count <= context.config.max_authors_full and compacted:
+        result.errors.append(
+            "Manageable author list is compacted: papers with "
+            f"{context.config.max_authors_full} or fewer named authors must list every author."
+        )
+    if compacted and count > context.config.max_authors_full:
+        note = meta.authorship.representation_note
+        if not re.search(r"compact|mega|consortium|full list|sidecar|QA", note, re.I):
+            result.errors.append("A compacted mega-authorship list must state the representation rule in Author notes.")
     if meta.authorship.author_count not in {None, count}:
         result.errors.append("Declared author count differs from the resolved ordered author list.")
-    if meta.authorship.representation_note:
+    if meta.authorship.representation_note and "Mega-authorship" not in meta.authorship.representation_note:
         result.warnings.append("The source byline is truncated with 'et al.'; the author list is incomplete.")
     result.components["authors"] = float(count > 0 and meta.authorship.author_count in {None, count})
+    return result
+
+
+def check_pdf_path(context: QAContext) -> CheckResult:
+    """The record must point at a canonical PDF that shares its filename stem."""
+    result = CheckResult("pdf_path")
+    pdf_path = context.frontmatter.get("pdf_path", "")
+    pdf_filename = context.frontmatter.get("pdf_filename", "")
+    markdown_stem = Path(context.frontmatter.get("pdf_filename", "x.pdf")).stem
+    result.measurements["pdf_path"] = pdf_path
+    if pdf_path and Path(pdf_path).name != pdf_filename:
+        result.errors.append("pdf_path and pdf_filename disagree; the canonical PDF is ambiguous.")
+    if context.config.verify_pdf_path:
+        if not pdf_path or not Path(pdf_path).is_file():
+            result.errors.append(f"Canonical PDF is not present at the declared pdf_path: {pdf_path or '(empty)'}.")
+        else:
+            result.measurements["pdf_path_verified"] = True
+    elif pdf_path and not Path(pdf_path).is_file():
+        result.warnings.append(
+            "pdf_path does not resolve on this machine; set --pdf-path to the repository location "
+            "and re-run with --verify-pdf-path before ingestion."
+        )
+    result.measurements["stem"] = markdown_stem
     return result
 
 
@@ -266,6 +306,106 @@ def check_density(context: QAContext) -> CheckResult:
         floor <= context.body_words <= config.hard_max_body_words
         and max(lengths, default=0) <= config.paragraph_hard_max_words
     )
+    return result
+
+
+# Digest target -> the heading it is rendered under.
+SECTION_HEADINGS = {
+    "summary": "## One-line Summary",
+    "information": "## 1. Document Information",
+    "contributions": "## 2. Key Contributions",
+    "methods": "## 3. Methodology and Architecture",
+    "results": "## 4. Key Results and Benchmarks",
+    "limitations": "## 5. Limitations and Future Work",
+    "related": "## 6. Related Work",
+    "glossary": "## 7. Glossary",
+}
+
+
+def _sections(markdown: str) -> dict[str, str]:
+    body = _body(markdown)
+    parts = re.split(r"(?m)^(## .+)$", body)
+    return {parts[index].strip(): parts[index + 1] for index in range(1, len(parts) - 1, 2)}
+
+
+def check_section_density(context: QAContext) -> CheckResult:
+    """Each section must carry its own weight, not just the body as a whole.
+
+    A section below its floor is an error when the source could have supplied
+    the words and a warning when it could not: a three-page guideline has no
+    300-word methods passage to quote, and saying so is the honest outcome.
+    """
+    result = CheckResult("section_density")
+    sections = _sections(context.markdown)
+    floors = context.config.section_min_words
+    applicable = PROFILES_BY_KEY.get(context.document_profile)
+    counts: dict[str, int] = {}
+    shortfalls: dict[str, dict[str, int]] = {}
+    # A glossary that already lists every term the source defines is complete
+    # even when those definitions are short; padding it would mean inventing
+    # glosses the paper never wrote.
+    glossary_entry_count = len(re.findall(r"(?m)^[-*+]\s+", sections.get("## 7. Glossary", "")))
+    for target, heading in SECTION_HEADINGS.items():
+        floor = floors.get(target, 0)
+        words = word_count(sections.get(heading, ""))
+        counts[heading] = words
+        if words >= floor:
+            continue
+        if applicable is not None and target not in applicable.applicable_targets and target != "glossary":
+            continue
+        capacity = context.section_capacity.get(target)
+        if target == "glossary":
+            shortfalls[heading] = {"words": words, "floor": floor, "entries": glossary_entry_count}
+            if glossary_entry_count >= context.config.min_glossary_entries:
+                result.warnings.append(
+                    f"{heading} has {words} words against a {floor}-word floor, but lists "
+                    f"{glossary_entry_count} entries: every term the source defines is already present."
+                )
+            else:
+                result.errors.append(f"Section is underdeveloped: {heading} has {words} words; minimum is {floor}.")
+            continue
+        shortfalls[heading] = {"words": words, "floor": floor, "source_capacity": capacity or 0}
+        if capacity is not None and capacity < floor:
+            result.warnings.append(
+                f"{heading} has {words} words against a {floor}-word floor; the source offers only "
+                f"about {capacity} quotable words for this section, so the shortfall is in the paper."
+            )
+        else:
+            result.errors.append(f"Section is underdeveloped: {heading} has {words} words; minimum is {floor}.")
+    result.measurements["section_word_counts"] = counts
+    result.measurements["section_shortfalls"] = shortfalls
+
+    document_information = counts.get("## 1. Document Information", 0)
+    if document_information > context.config.max_document_information_words:
+        result.errors.append("Document Information is audit-heavy rather than retrieval-native.")
+
+    contributions = sections.get("## 2. Key Contributions", "")
+    items = re.findall(r"(?m)^(?:\d+\.|[-*+])\s+", contributions)
+    result.measurements["contribution_items"] = len(items)
+    if not context.config.min_contribution_items <= len(items) <= context.config.max_contribution_items:
+        result.errors.append(
+            f"Key Contributions must contain {context.config.min_contribution_items}-"
+            f"{context.config.max_contribution_items} explicit items; found {len(items)}."
+        )
+
+    glossary_entries = re.findall(r"(?m)^[-*+]\s+", sections.get("## 7. Glossary", ""))
+    result.measurements["glossary_entries"] = len(glossary_entries)
+    if len(glossary_entries) < context.config.min_glossary_entries:
+        result.errors.append(
+            f"Glossary must contain at least {context.config.min_glossary_entries} entries; "
+            f"found {len(glossary_entries)}."
+        )
+
+    summary = sections.get("## One-line Summary", "").strip()
+    summary_words = word_count(summary)
+    result.measurements["one_line_summary_words"] = summary_words
+    if re.search(r"(?m)^[-*+] |^\d+\. ", summary) or len(re.split(r"\n\s*\n", summary)) != 1:
+        result.errors.append("One-line Summary must be a single prose paragraph without a list.")
+    if summary_words > 140:
+        result.errors.append("One-line Summary exceeds 140 words and is no longer a one-line digest.")
+    elif not 30 <= summary_words <= 100:
+        result.warnings.append(f"One-line Summary has {summary_words} words; the retrieval-density target is 30-100.")
+    result.components["section_density"] = 0.0 if result.errors else (1.0 if not shortfalls else 0.75)
     return result
 
 
@@ -507,7 +647,9 @@ CHECKS: tuple[Callable[[QAContext], CheckResult], ...] = (
     check_schema,
     check_metadata,
     check_authors,
+    check_pdf_path,
     check_density,
+    check_section_density,
     check_duplication,
     check_process_leak,
     check_quantitative,
@@ -521,17 +663,19 @@ CHECKS: tuple[Callable[[QAContext], CheckResult], ...] = (
 )
 
 WEIGHTS = {
-    "schema": 0.13,
-    "metadata": 0.12,
-    "authors": 0.07,
-    "content": 0.12,
-    "quantitative": 0.10,
-    "density": 0.08,
-    "evidence": 0.08,
+    "schema": 0.12,
+    "metadata": 0.11,
+    "authors": 0.06,
+    "content": 0.11,
+    "quantitative": 0.09,
+    "density": 0.05,
+    "section_density": 0.07,
+    "evidence": 0.07,
     "grounding": 0.16,
-    "coverage": 0.08,
+    "coverage": 0.10,
     "retrieval": 0.06,
 }
+assert abs(sum(WEIGHTS.values()) - 1.0) < 1e-9, "quality-score weights must sum to 1"
 
 
 def evaluate_digest(
@@ -546,6 +690,7 @@ def evaluate_digest(
     coverage: dict[str, Any] | None = None,
     document_profile: str = "empirical_research",
     metadata_ledger: list[dict[str, Any]] | None = None,
+    section_capacity: dict[str, int] | None = None,
     authored: list[str] | None = None,
 ) -> dict[str, Any]:
     order, frontmatter = _frontmatter(markdown)
@@ -562,6 +707,7 @@ def evaluate_digest(
         coverage=coverage or {},
         document_profile=document_profile,
         metadata_ledger=list(metadata_ledger or []),
+        section_capacity=dict(section_capacity or {}),
         authored=list(authored or []),
         frontmatter_order=order,
         frontmatter=frontmatter,

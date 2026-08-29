@@ -16,7 +16,7 @@ from ..evidence import coverage_ledger, evidence_units
 from ..glossary import build as build_glossary
 from ..keywords import extract_keyphrases
 from ..models import ParsedBundle
-from ..selection import Candidate, build_candidates, select
+from ..selection import Candidate, build_candidates, expand_passage, score_for, select
 from ..taxonomy import classify_design
 from ..text import normalize_prose, unique_preserve, word_count
 from .base import ProfileContent, ProfileScore
@@ -36,6 +36,10 @@ LIMITS = {"information": 8, "contributions": 7, "methods": 26, "results": 28, "l
 # Targets are filled in this order; earlier targets claim a sentence first, so
 # a limitation never reappears as a contribution.
 ORDER = ("summary", "information", "limitations", "related", "contributions", "results", "methods")
+# Targets whose meaning comes from the source section itself may be filled
+# without a cue match. Limitations is not one of them: a limitation is defined
+# by its cue, so relaxing it would turn ordinary discussion into a caveat.
+RELAXABLE = {"methods": 3, "results": 3, "information": 2, "contributions": 3, "related": 2}
 
 ABSENCE_NOTES = {
     "information": "The source states no explicit objective or data-availability statement that could be quoted verbatim.",
@@ -53,7 +57,11 @@ NOT_APPLICABLE_NOTES = {
 }
 
 
-def _pack(items: list[Candidate], heading: str, max_words: int = 170) -> str:
+def _words(items: list[Candidate]) -> int:
+    return sum(word_count(item.text) for item in items)
+
+
+def _pack(items: list[Candidate], heading: str, max_words: int = 110) -> str:
     paragraphs: list[str] = []
     current: list[str] = []
     count = 0
@@ -76,6 +84,7 @@ def _section_body(
     profile: DocumentProfile,
     style: str = "paragraph",
     authored: list[str] | None = None,
+    pack_words: int = 110,
 ) -> str:
     heading = profile.subheadings.get(target, target.title())
     if items:
@@ -83,7 +92,7 @@ def _section_body(
             return "\n".join(f"{index}. {item.text}" for index, item in enumerate(items, start=1))
         if style == "bullet":
             return "\n".join(f"- {item.text}" for item in items)
-        return _pack(items, heading)
+        return _pack(items, heading, pack_words)
     if target not in profile.applicable_targets:
         note = NOT_APPLICABLE_NOTES.get(target, "This document type does not carry this content.")
     else:
@@ -211,6 +220,7 @@ class UniversalProfile:
         self.document_profile: DocumentProfile = DEFAULT_PROFILE
         self.profile_ranking: list[tuple[str, float]] = []
         self.coverage: dict[str, object] = {}
+        self.section_capacity: dict[str, int] = {}
 
     def score(self, bundle: ParsedBundle) -> ProfileScore:
         sections = {name for name, value in bundle.sections.items() if value.paragraphs}
@@ -274,23 +284,60 @@ class UniversalProfile:
             taken.extend(items)
 
         # A digest section must not be silently thin when the source has the
-        # material: retry without the cue requirement before giving up.
-        # Only sections whose meaning comes from the source section itself are
-        # topped up. A limitation is defined by its cue, not by where it sits,
-        # so an empty limitations section stays empty and says so.
-        thin = {"methods": 3, "results": 3, "information": 2, "contributions": 3}
+        # material. First try to reach the section floor with cue-matching
+        # sentences, then — only for sections whose meaning comes from the
+        # source section itself — retry without the cue requirement.
+        floors = self.config.section_min_words
         relaxed_targets: list[str] = []
         for target in ORDER:
-            if target not in thin or target not in profile.applicable_targets:
+            if target == "summary" or target not in profile.applicable_targets:
                 continue
-            if len(selected[target]) >= thin[target]:
+            floor = floors.get(target, 0)
+            if _words(selected[target]) >= floor:
+                continue
+            extra = select(
+                candidates,
+                target,
+                budget=int(max(BUDGETS[target] * scale, floor * 2.2)),
+                limit=LIMITS[target] * 2,
+                taken=[item for item in taken if item not in selected[target]],
+            )
+            fresh = [item for item in extra if item not in selected[target]]
+            if fresh:
+                selected[target] = sorted(selected[target] + fresh, key=lambda item: item.order)
+                taken.extend(fresh)
+
+        # Cue matching finds the sentence that signals a passage; the rest of
+        # that paragraph belongs to the same passage. Taking it whole is how a
+        # thin section is filled without relaxing what the cue means.
+        for target in ORDER:
+            if target == "summary" or target not in profile.applicable_targets:
+                continue
+            if _words(selected[target]) >= floors.get(target, 0) or not selected[target]:
+                continue
+            before = list(selected[target])
+            selected[target] = expand_passage(
+                candidates,
+                selected[target],
+                budget=int(max(BUDGETS[target] * scale, floors.get(target, 0) * 2.0)),
+                limit=LIMITS[target] + 6,
+                taken=taken,
+            )
+            taken.extend(item for item in selected[target] if item not in before)
+
+        # The relaxed pass never invents a limitation out of ordinary prose.
+        for target in ORDER:
+            if target not in RELAXABLE or target not in profile.applicable_targets:
+                continue
+            floor = floors.get(target, 0)
+            if len(selected[target]) >= RELAXABLE[target] and _words(selected[target]) >= floor:
                 continue
             items = select(
                 candidates,
                 target,
-                budget=int(BUDGETS[target] * scale * 0.7),
-                limit=max(3, LIMITS[target] // 2),
-                taken=taken,
+                budget=int(max(BUDGETS[target] * scale * 0.9, floor * 1.8)),
+                limit=max(4, LIMITS[target]),
+                taken=[item for item in taken if item not in selected[target]],
                 relaxed=True,
             )
             fresh = [item for item in items if item not in selected[target]]
@@ -299,20 +346,38 @@ class UniversalProfile:
                 taken.extend(fresh)
                 relaxed_targets.append(target)
 
-        # Contributions are the thinnest target on many papers; back-fill from
-        # the strongest unused result statements rather than leaving it empty.
-        if len(selected["contributions"]) < 3 and "contributions" in profile.applicable_targets:
-            backfill = select(
-                candidates,
-                "results",
-                budget=int(BUDGETS["contributions"] * scale),
-                limit=4 - len(selected["contributions"]),
-                taken=taken,
-            )
-            selected["contributions"].extend(backfill)
-            selected["contributions"].sort(key=lambda item: item.order)
-            taken.extend(backfill)
+        # Key Contributions must carry between three and seven explicit items.
+        minimum = self.config.min_contribution_items
+        maximum = self.config.max_contribution_items
+        if "contributions" in profile.applicable_targets:
+            if len(selected["contributions"]) < minimum:
+                backfill = select(
+                    candidates,
+                    "results",
+                    budget=int(BUDGETS["contributions"] * scale),
+                    limit=minimum + 1 - len(selected["contributions"]),
+                    taken=[item for item in taken if item not in selected["contributions"]],
+                )
+                selected["contributions"].extend(backfill)
+                selected["contributions"].sort(key=lambda item: item.order)
+                taken.extend(backfill)
+            if len(selected["contributions"]) > maximum:
+                keep = sorted(
+                    selected["contributions"],
+                    key=lambda item: -score_for(item, "contributions"),
+                )[:maximum]
+                selected["contributions"] = sorted(keep, key=lambda item: item.order)
 
+        # Capacity is measured in the mode the target is actually filled in, so
+        # a shortfall can be attributed to the source rather than the selector.
+        self.section_capacity = {
+            target: sum(
+                word_count(item.text)
+                for item in candidates
+                if score_for(item, target, relaxed=target in RELAXABLE) > 0.0
+            )
+            for target in ORDER
+        }
         summary_items = selected.pop("summary", [])
         content_sections = {target: [item.text for item in items] for target, items in selected.items()}
         self.coverage = coverage_ledger(bundle, profile, content_sections)
@@ -329,8 +394,19 @@ class UniversalProfile:
 
         authored: list[str] = []
         one_line = _one_line(summary_items, bundle, authored)
-        info_body = _section_body("information", selected["information"], profile, authored=authored)
-        glossary_text, glossary_authored = build_glossary(bundle.full_text, bundle.metadata.index_keywords)
+        info_body = _section_body(
+            "information",
+            selected["information"],
+            profile,
+            authored=authored,
+            pack_words=self.config.paragraph_pack_target_words,
+        )
+        glossary_text, glossary_authored = build_glossary(
+            bundle.full_text,
+            bundle.metadata.index_keywords,
+            minimum=self.config.min_glossary_entries,
+            min_words=self.config.section_min_words.get("glossary", 60),
+        )
         authored.extend(glossary_authored)
         return ProfileContent(
             one_line_summary=one_line,

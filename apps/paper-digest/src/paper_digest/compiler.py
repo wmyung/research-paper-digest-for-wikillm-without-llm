@@ -70,6 +70,33 @@ def _yaml_string(value: str) -> str:
     return f'"{markdown_escape_yaml(value)}"'
 
 
+def render_authors(metadata: PublicationMetadata, config: DigestConfig) -> tuple[str, str]:
+    """Render the frontmatter author list, compacting only a mega-authorship.
+
+    Up to the configured threshold every author is named. Above it the full list
+    is still preferred and is only compacted when it would dominate retrieval;
+    the complete list stays in the QA sidecar and the rule is stated in
+    Author notes.
+    """
+    authors = metadata.authorship.authors
+    joined = ", ".join(authors)
+    if len(authors) <= config.max_authors_full or len(joined) <= config.max_authors_characters:
+        return joined, ""
+    kept: list[str] = []
+    for author in authors:
+        candidate = ", ".join([*kept, author])
+        if len(candidate) > config.max_authors_characters - 120:
+            break
+        kept.append(author)
+    compacted = ", ".join(kept) + ", et al."
+    note = (
+        f"Mega-authorship: {len(authors)} named authors were extracted; the frontmatter list is compacted "
+        f"to the first {len(kept)} because the full list exceeds {config.max_authors_characters} characters. "
+        "The complete list is retained in the QA sidecar."
+    )
+    return compacted, note
+
+
 def compile_markdown(
     bundle: ParsedBundle, content: ProfileContent, config: DigestConfig, stem: str | None = None
 ) -> tuple[str, str]:
@@ -78,7 +105,9 @@ def compile_markdown(
     pdf_filename = f"{stem}.pdf"
     pdf_path = config.pdf_path or f"/papers/{pdf_filename}"
     extracted_date = config.extracted_date or date.today().isoformat()
-    authors = ", ".join(metadata.authorship.authors)
+    authors, compaction_note = render_authors(metadata, config)
+    if compaction_note:
+        metadata.authorship.representation_note = compaction_note
     frontmatter = [
         "---",
         f"title: {_yaml_string(metadata.title)}",

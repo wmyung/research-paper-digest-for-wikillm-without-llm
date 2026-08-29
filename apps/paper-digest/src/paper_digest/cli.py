@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pdf-path", default=None, help="Repository path written to frontmatter.")
     parser.add_argument("--source-collection", default="publisher-pdf")
     parser.add_argument("--offline", action="store_true", help="Disable DOI-registry metadata repair.")
+    parser.add_argument(
+        "--verify-pdf-path",
+        action="store_true",
+        help="Require the canonical PDF to exist at the pdf_path written to frontmatter.",
+    )
     parser.add_argument("--json-only", action="store_true", help="Print JSON only; do not write files.")
     return parser
 
@@ -37,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         pdf_path=args.pdf_path,
         source_collection=args.source_collection,
         enable_doi_metadata=not args.offline,
+        verify_pdf_path=args.verify_pdf_path,
     )
     result = digest_files(args.inputs, config)
     payload = result.to_dict(include_markdown=args.json_only)

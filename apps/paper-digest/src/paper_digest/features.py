@@ -63,17 +63,23 @@ NOVELTY_RE = re.compile(
 # A limitation is either explicitly named, or is a first-person statement of
 # something the authors could not do. "X could not believe Y" is neither.
 LIMITATION_STRONG_RE = re.compile(
-    r"\b(?:limitations?|caveats?|should be interpreted with caution|may not generali[sz]e|"
-    r"generali[sz]ability|small sample size|underpowered|underrepresent\w*|selection bias|"
-    r"residual confounding|recall bias|measurement error|"
-    r"future (?:studies|research|work)|further (?:studies|research|work) (?:is|are|will)|"
-    r"remains? unclear|beyond the scope)\b",
+    r"\b(?:limitations?|caveats?|should be interpreted|must be interpreted|"
+    r"may not generali[sz]e|generali[sz]ability|small sample size|underpowered|"
+    r"underrepresent\w*|selection bias|residual confounding|recall bias|reporting bias|"
+    r"measurement error|misclassification|confounding cannot|cannot be excluded|"
+    r"cannot be ruled out|no causal|not causal|causal(?:ity)? cannot|"
+    r"is limited by|are limited by|was limited to|were limited to|"
+    r"was restricted to|were restricted to|"
+    r"future (?:studies|research|work)|further (?:studies|research|work)|"
+    r"remains? unclear|remains? unknown|beyond the scope|warrants? (?:further|caution)|"
+    r"should be (?:confirmed|replicated|validated)|"
+    r"these findings? should|this (?:finding|result) should)\b",
     re.I,
 )
 LIMITATION_WEAK_RE = re.compile(
     r"\b(?:cannot|could not|was not able|were not able|unable to|not possible to|"
     r"did not (?:assess|measure|examine|allow|include|permit|collect|capture)|"
-    r"were excluded|too small)\b",
+    r"were excluded|too small|no information (?:on|about)|lack(?:ed|ing)? (?:data|information))\b",
     re.I,
 )
 METHOD_RE = re.compile(

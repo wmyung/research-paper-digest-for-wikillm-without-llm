@@ -38,6 +38,20 @@ def test_real_definitions_are_emitted_without_a_fallback_note():
         "We used an Interferon Gamma Release Assay (IGRA), a tuberculin skin test (TST), "
         "a chest X-ray (CXR) and a Public Health Service (PHS) register."
     )
-    body, authored = build(text, ["tuberculosis"])
+    body, authored = build(text, ["tuberculosis"], minimum=4, min_words=10)
     assert authored == []
     assert body.count("- **") == 4
+
+
+def test_reverse_order_acronym_definitions_are_recognised():
+    text = "We ran IGRA (interferon gamma release assay) before the LTBI (latent TB infection) review."
+    body, _authored = build(text, [], minimum=2, min_words=10)
+    assert "**IGRA**" in body
+    assert "**LTBI**" in body
+
+
+def test_the_section_reaches_its_floor_or_says_why():
+    body, authored = build("The study measured throughput.", ["retrieval"], minimum=5, min_words=60)
+    # Nothing is invented: the shortfall is stated rather than padded with glosses.
+    assert authored
+    assert "no further defined terms" in body or "no defined terms" in body

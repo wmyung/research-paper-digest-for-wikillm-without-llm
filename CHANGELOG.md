@@ -1,5 +1,69 @@
 # Changelog
 
+## 2.1.0
+
+Aligned the record with the LLM Wiki source-record standard published in
+`wmyung/paper-to-llm-wiki-digest`, measured by running that project's own
+`validate_source_md.py` and `audit_source_density.py` against this compiler's
+output. A representative empirical paper went from two hard failures to none.
+
+### Per-section density gates
+
+- New `section_density` check enforcing the standard's per-section word floors,
+  the 3-7 range for Key Contributions, the five-entry minimum for the Glossary,
+  and the one-paragraph rule for the One-line Summary.
+- A section below its floor is an error only when the source could have supplied
+  the words. The compiler now records, per target, how many quotable words the
+  source offers, so a short paper is reported as a source limitation rather than
+  failed for a deficiency in the paper.
+- A glossary listing every term the source defines is complete even when short;
+  the shortfall is a warning, because padding it would mean inventing glosses.
+
+### Cue-anchored passage expansion
+
+- A limitations passage is contiguous prose: authors signal it once and then
+  continue. Sentences beside a cue-matching sentence, inside the same paragraph,
+  are now taken with it. This fills thin sections without loosening what a cue
+  means, and every added sentence is still verbatim source text.
+
+### Limitations recall
+
+- Impersonal and third-person limitation language is recognised: "cannot be
+  excluded", "is limited by", "was restricted to", "should be interpreted",
+  "misclassification", "no causal".
+- A sentence's position within its section is scored, because a limitations
+  passage sits at the end of a Discussion.
+
+### Glossary recall
+
+- Reverse-order definitions — "IGRA (interferon gamma release assay)" — are now
+  recognised alongside "interferon gamma release assay (IGRA)".
+- An embedded acronym contributes all its letters, so "latent TB infection"
+  correctly abbreviates to LTBI rather than LTI.
+- "also known as", "that is" and "i.e." aliases are captured.
+- Recurring acronyms the source never expands are named as such instead of being
+  silently dropped. Speaker codes and table keys such as `PHS1` are excluded.
+
+### Authorship and provenance
+
+- Above the author threshold the full list is still preferred and is compacted
+  only when it would exceed the character budget; the rule is then stated in
+  `Author notes` and the complete list is retained in the QA sidecar.
+- A compacted list at or below the threshold is a hard error.
+- `pdf_path` and `pdf_filename` must agree, and `--verify-pdf-path` requires the
+  canonical PDF to exist at the declared path.
+
+### Retrieval density
+
+- Prose units are packed to 110 words rather than 170, matching the reference
+  records, which average about 45 words per unit and never exceed 110.
+
+### Tests
+
+- The synthetic fixture is now a realistic 1,700-word paper with a full
+  acronym set, so the end-to-end test exercises the density gates rather than
+  passing on a stub. Suite: 102 tests.
+
 ## 2.0.0
 
 Rebuilt the three stages that determine digest quality — layout analysis,

@@ -15,8 +15,13 @@ under `checks.check_status`.
 
 - journal or publication venue resolved;
 - a publication date or year resolved;
-- ordered author list resolved, with all authors required at or below the
-  configured threshold;
+- ordered author list resolved, with every author required at or below the
+  configured threshold — a compacted list there is a hard error;
+- above the threshold the full list is still preferred and is compacted only
+  when it would exceed the character budget; the compaction rule must then be
+  stated in `Author notes`, and the complete list is retained in the QA sidecar;
+- `pdf_path` and `pdf_filename` must agree; with `--verify-pdf-path` the
+  canonical PDF must exist at the declared path;
 - declared and parsed author counts agree;
 - 2-6 research fields and 6-15 retrieval keywords;
 - complete `Classification metadata` labels;
@@ -62,6 +67,33 @@ under `checks.check_status`.
 - no exact duplicate prose units and no sentence repeated across sections;
 - headline numbers in the abstract that never reappear elsewhere in the source
   are surfaced as a warning to cross-check against the tables.
+
+## Section-density gates (`section_density`)
+
+Each section must carry its own weight, not just the body as a whole. The floors
+follow the WikiLLM source-record standard:
+
+| Section | Floor |
+|---|---:|
+| One-line Summary | 20 words (30-100 preferred, >140 fails) |
+| 1. Document Information | 120 words (>750 fails as audit-heavy) |
+| 2. Key Contributions | 100 words, 3-7 explicit items |
+| 3. Methodology and Architecture | 300 words |
+| 4. Key Results and Benchmarks | 400 words |
+| 5. Limitations and Future Work | 150 words |
+| 6. Related Work | 80 words |
+| 7. Glossary | 60 words, at least 5 entries |
+
+A section below its floor is an **error** when the source could have supplied
+the words, and a **warning** naming the shortfall when it could not. The
+compiler records, per target, how many quotable words the source offers, so the
+two cases are distinguishable rather than conflated: a three-page reporting
+guideline has no 300-word methods passage to quote, and saying so is the honest
+outcome.
+
+The glossary is the one section measured by completeness rather than length. If
+it already lists every term the source defines, a word shortfall is a warning —
+padding it would mean inventing glosses the paper never wrote.
 
 ## Retrieval-density gates (`density`, `retrieval`)
 

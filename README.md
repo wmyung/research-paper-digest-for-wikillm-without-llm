@@ -158,6 +158,7 @@ must treat only `SOURCE_READY` as certified.
 | Sentence importance | Standard-library LexRank over an idf-weighted overlap graph |
 | Digest writing | Extractive selection by maximal-marginal-relevance under a word budget |
 | Fabrication control | Post-hoc verbatim grounding audit over the alphanumeric skeleton |
+| Thin sections | Cue-anchored passage expansion: the paragraph around a cue is taken whole |
 | Missing coverage | Up to four deterministic repair passes, then an explicit statement of absence |
 | Retrieval validation | BM25 full-question regression suite |
 | Bibliographic repair | Optional DOI-only Crossref lookup |
@@ -179,6 +180,8 @@ The compiler does not claim success because it produced text. `SOURCE_READY`
 requires every hard gate and a quality score of at least `0.95`.
 
 - exact 11-key YAML frontmatter and eight required H2 sections;
+- per-section word floors, with a shortfall attributed to the source when the
+  source genuinely cannot supply it;
 - **every prose sentence verified as a verbatim span of the source**, checked
   after compilation rather than assumed;
 - a page-addressable evidence ledger and a per-slot coverage ledger;
@@ -286,6 +289,27 @@ Local Web App ─────┼──> deterministic paper compiler ──> Mar
 MCP Agent Tool ────┤       layout / OCR / evidence / repair / BM25 gates
 Firecrawl Overlay ─┘
 ```
+
+### Compatibility with the LLM Wiki source-record standard
+
+The output targets the `sources/` stage of
+[joonan30's LLM Wiki workflow](https://gist.github.com/joonan30/cbce305684d079dbe9a3fbaefe4e3959)
+and is checked against the reference standard published in
+[paper-to-llm-wiki-digest](https://github.com/wmyung/paper-to-llm-wiki-digest).
+Records produced here pass that project's `validate_source_md.py
+--require-classification` and `audit_source_density.py`.
+
+One divergence is deliberate. Where the reference validator treats a section
+below its floor as a hard error, this compiler first measures how many quotable
+words the source actually offers for that section. When the source cannot supply
+the floor — a short reporting guideline with a 240-word development section, for
+example — the record is certified with an explicit warning naming the shortfall
+and its cause, rather than failed for a deficiency in the paper. Everything the
+source *can* supply is still required.
+
+The `wiki/{category}/` tier, bidirectional `[[overviews/...]]` synthesis links,
+and the `WIKI_INGESTED` state are **not** implemented here; this project stops at
+`SOURCE_READY`.
 
 See [Architecture](docs/ARCHITECTURE.md), [Document Profiles](docs/DOCUMENT_PROFILES.md),
 [Evidence Ledgers](docs/EVIDENCE_LEDGERS.md), [Quality Gates](docs/QUALITY_GATES.md),

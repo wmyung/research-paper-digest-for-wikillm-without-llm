@@ -56,9 +56,13 @@ class Candidate:
     page_end: int
     source_file: str
     order: int
+    paragraph: int
     features: F.SentenceFeatures
     tokens: set[str] = field(default_factory=set)
     centrality: float = 0.0
+    # How far through its own section the sentence sits, in [0, 1]. Authors put
+    # their limitations at the end of the Discussion.
+    section_position: float = 0.0
     score: float = 0.0
 
 
@@ -161,7 +165,13 @@ SPECS: dict[str, TargetSpec] = {
     "limitations": TargetSpec(
         primary_sections=frozenset({"Limitations", "Discussion", "Conclusion"}),
         allowed_sections=frozenset({"Limitations", "Discussion", "Conclusion", "Abstract", "Results"}),
-        weights={"has_limitation": 3.0, "has_self_reference": 0.7, "has_null_result": 0.8, "has_hedge": 0.3},
+        weights={
+            "has_limitation": 3.0,
+            "has_limitation_strong": 1.2,
+            "has_self_reference": 0.7,
+            "has_null_result": 0.8,
+            "has_hedge": 0.3,
+        },
         require=("has_limitation",),
         penalise={"has_novelty": 0.8},
         subsection_pattern=r"limitation|strength|caveat|future",
@@ -210,10 +220,12 @@ def _acceptable(text: str, feats: F.SentenceFeatures) -> bool:
 def build_candidates(bundle: ParsedBundle) -> list[Candidate]:
     output: list[Candidate] = []
     order = 0
+    paragraph_index = 0
     for name, section in bundle.sections.items():
         if name in NON_SCIENTIFIC or name in {"References", "Supplementary"}:
             continue
         for paragraph in section.paragraphs:
+            paragraph_index += 1
             for raw in split_sentences(paragraph.text):
                 order += 1
                 text = clean_sentence(raw)
@@ -231,12 +243,24 @@ def build_candidates(bundle: ParsedBundle) -> list[Candidate]:
                         page_end=paragraph.page_end,
                         source_file=paragraph.source_file,
                         order=order,
+                        paragraph=paragraph_index,
                         features=feats,
                         tokens={token for token in TOKEN_RE.findall(text.casefold()) if token not in STOPWORDS},
                     )
                 )
     _score_centrality(output)
+    _score_section_position(output)
     return output
+
+
+def _score_section_position(candidates: list[Candidate]) -> None:
+    by_section: dict[str, list[Candidate]] = {}
+    for candidate in candidates:
+        by_section.setdefault(candidate.section, []).append(candidate)
+    for items in by_section.values():
+        last = len(items) - 1
+        for index, candidate in enumerate(items):
+            candidate.section_position = index / last if last else 1.0
 
 
 def _score_centrality(candidates: list[Candidate], iterations: int = 24, damping: float = 0.85) -> None:
@@ -327,7 +351,47 @@ def score_for(candidate: Candidate, target: str, relaxed: bool = False) -> float
         score -= candidate.order / 4000.0
     if candidate.subsection and re.search(r"limitation|strength", candidate.subsection, re.I):
         score += 1.5 if target == "limitations" else -1.0
+    if target == "limitations" and candidate.section == "Discussion":
+        # Limitations passages sit at the end of a Discussion section.
+        score += 1.6 * max(0.0, candidate.section_position - 0.55) / 0.45
     return max(0.0, score)
+
+
+def expand_passage(
+    candidates: list[Candidate],
+    chosen: list[Candidate],
+    *,
+    budget: int,
+    limit: int,
+    taken: list[Candidate],
+) -> list[Candidate]:
+    """Add the neighbours of chosen sentences inside the same paragraph.
+
+    A limitations passage is contiguous prose: the authors signal it once and
+    then continue. Sentences beside a cue-matching sentence, in the same
+    paragraph, belong to the same passage even when they carry no cue of their
+    own — and they are still verbatim source text.
+    """
+    if not chosen:
+        return chosen
+    anchors = {item.paragraph for item in chosen}
+    picked = {id(item) for item in chosen}
+    blocked = [item.tokens for item in taken if id(item) not in picked]
+    words = sum(word_count(item.text) for item in chosen)
+    neighbours = [
+        item
+        for item in candidates
+        if item.paragraph in anchors and id(item) not in picked and not item.features.is_structural_noise
+    ]
+    for item in sorted(neighbours, key=lambda value: value.order):
+        if len(chosen) >= limit or words >= budget:
+            break
+        if max((_similarity(item.tokens, other) for other in blocked), default=0.0) >= 0.55:
+            continue
+        chosen.append(item)
+        blocked.append(item.tokens)
+        words += word_count(item.text)
+    return sorted(chosen, key=lambda item: item.order)
 
 
 def _similarity(left: set[str], right: set[str]) -> float:
