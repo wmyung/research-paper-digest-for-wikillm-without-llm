@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from .models import CompiledDigest
+
+IDENTITY_RE = re.compile(r"^(?:title|doi):\s*(.*)$", re.M)
 
 
 @dataclass(slots=True)
@@ -33,6 +36,35 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _identity(markdown: str) -> tuple[str, ...]:
+    """The title and DOI that identify which document a record describes."""
+    head = markdown.split("\n---\n", 1)[0]
+    return tuple(value.strip().strip('"') for value in IDENTITY_RE.findall(head))
+
+
+def _free_stem(output_dir: Path, stem: str, markdown: str) -> str:
+    """Pick a stem that will not overwrite a different document's record.
+
+    Two papers can share a filename stem when neither yields an author or a
+    year — a batch run must not silently lose one of them. Re-running the same
+    paper still overwrites its own record in place.
+    """
+    identity = _identity(markdown)
+    candidate = stem
+    suffix = 1
+    while True:
+        existing = output_dir / f"{candidate}.md"
+        if not existing.exists():
+            return candidate
+        try:
+            if _identity(existing.read_text(encoding="utf-8")) == identity:
+                return candidate
+        except OSError:
+            return candidate
+        suffix += 1
+        candidate = f"{stem}-{suffix}"
+
+
 def write_artifacts(result: CompiledDigest, output_dir: Path) -> ArtifactPaths:
     """Write the grounded Markdown plus its QA report and two audit ledgers.
 
@@ -42,7 +74,7 @@ def write_artifacts(result: CompiledDigest, output_dir: Path) -> ArtifactPaths:
     """
     output_dir = output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    stem = Path(result.filename).stem
+    stem = _free_stem(output_dir, Path(result.filename).stem, result.markdown)
     markdown_path = output_dir / f"{stem}.md"
     qa_path = output_dir / f"{stem}.qa.json"
     metadata_path = output_dir / f"{stem}.metadata-evidence.json"

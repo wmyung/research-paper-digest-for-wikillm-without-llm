@@ -94,6 +94,9 @@ property rather than a design intention.
   caption, reference list — so layout analysis is tested end to end without
   committing anyone's paper. The suite grew from 24 to 92 tests.
 - A malformed byline degrades to `NOT_SOURCE_READY` instead of raising.
+- Two documents that resolve to the same filename stem — which happens when
+  neither yields an author or a year — no longer overwrite each other in a batch
+  run. Re-running the same paper still replaces its own record in place.
 - Suspended hyphens (`author- and index-level`) survive de-hyphenation.
 
 ## 1.3.1

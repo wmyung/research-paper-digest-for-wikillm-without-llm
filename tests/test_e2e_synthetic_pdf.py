@@ -74,3 +74,27 @@ def test_artifacts_are_written_as_markdown_plus_a_qa_sidecar(digest, tmp_path):
     payload = json.loads(qa_path.read_text(encoding="utf-8"))
     assert payload["source_ready"] is True
     assert payload["coverage_ledger"]["slots"]
+
+
+def test_two_documents_sharing_a_stem_do_not_overwrite_each_other(tmp_path):
+    from paper_digest.models import CompiledDigest, PublicationMetadata
+
+    def record(title: str) -> CompiledDigest:
+        return CompiledDigest(
+            status="NOT_SOURCE_READY",
+            markdown=f'---\ntitle: "{title}"\ndoi: \n---\n\n## One-line Summary\n\nText.\n',
+            filename="paper-undated-source-record.md",
+            metadata=PublicationMetadata(title=title),
+            qa={"metadata_ledger": [], "coverage_ledger": {}},
+        )
+
+    first = write_artifacts(record("First scanned document"), tmp_path)
+    second = write_artifacts(record("Second scanned document"), tmp_path)
+    again = write_artifacts(record("First scanned document"), tmp_path)
+
+    assert first.markdown != second.markdown
+    assert second.markdown.name == "paper-undated-source-record-2.md"
+    # Re-running the same document reuses its own record rather than piling up.
+    assert again.markdown == first.markdown
+    assert "First scanned document" in first.markdown.read_text(encoding="utf-8")
+    assert "Second scanned document" in second.markdown.read_text(encoding="utf-8")
