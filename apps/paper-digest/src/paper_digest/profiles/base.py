@@ -27,6 +27,9 @@ class ProfileContent:
     warnings: list[str] = field(default_factory=list)
     evidence: list[dict[str, object]] = field(default_factory=list)
     retrieval_queries: list[dict[str, object]] = field(default_factory=list)
+    # Sentences the compiler wrote itself (absence notes, glossary fallbacks).
+    # Everything else in the body must be a verbatim source span.
+    authored: list[str] = field(default_factory=list)
 
 
 class PaperProfile(Protocol):

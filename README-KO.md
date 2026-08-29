@@ -6,8 +6,9 @@
 
 연구논문 PDF와 보충자료를 생성형 LLM, 임베딩 모델, reranker, VLM, 모델 API
 키, GPU 없이 근거 추적 가능한 WikiLLM 소스 Markdown으로 변환합니다. 레이아웃
-파싱, OCR, 규칙 기반 연구설계 분류, 출처 문장 점수화, 자동 보완, BM25 검색
-회귀검사를 모두 결정론적으로 수행합니다.
+분석, OCR, 문서 프로파일 분류, 자질 기반 문장 선택(LexRank 중심성 + MMR),
+자동 보완, 컴파일 후 원문 대조 검증, BM25 검색 회귀검사를 모두 결정론적으로
+수행합니다.
 
 이 프로젝트는 **[Firecrawl](https://github.com/firecrawl/firecrawl)**에서 영감을
 받아 선택적 Firecrawl v2 연동을 제공하며,
@@ -53,9 +54,16 @@ python3 -m venv .venv
 .venv/bin/paper-digest --offline paper.pdf -o output
 ```
 
-`*.md`와 `*.qa.json`이 함께 생성됩니다. `SOURCE_READY`일 때만 종료코드가
-0이고, 품질 게이트 미달이면 결과물은 보존하면서 종료코드 2와 정확한 미달
-사유를 반환합니다.
+실행할 때마다 파일 4개가 생성됩니다.
+
+- `*.md` — 근거가 추적되는 WikiLLM 소스 Markdown 후보
+- `*.qa.json` — 점수, hard gate 검사, 검색 회귀검사, 미달 사유
+- `*.metadata-evidence.json` — 각 서지정보 값의 출처·페이지·원문 발췌
+- `*.evidence-coverage.json` — 해당 문서 프로파일의 근거 슬롯 중 원문이 실제로
+  다루는 항목과 다루지 않는 항목
+
+`SOURCE_READY`일 때만 종료코드가 0이고, 품질 게이트 미달이면 결과물은
+보존하면서 종료코드 2와 정확한 미달 사유를 반환합니다.
 
 ### 2. 사람이 로컬 웹앱에서 사용
 
@@ -84,12 +92,33 @@ MCP 도구 `digest_research_paper`에 절대 입력 경로 목록과 출력 디�
 실행할 수 있습니다. 결과 경로·상태·점수·QA 오류만 반환합니다. 에이전트도
 `SOURCE_READY`만 인증 결과로 취급해야 합니다.
 
+## 무엇이 "LLM 없이" 가능한가
+
+| 기능 | 구현 |
+|---|---|
+| 읽기 순서 | x축 밀도 히스토그램으로 단(column) 경계를 찾아 복원. PDF 내부 스트림 순서를 따르지 않음 |
+| 러닝헤드·표지 | 숫자를 마스킹한 페이지 간 반복 탐지, 기관 리포지터리 표지 자동 제외 |
+| 표·캡션·참고문헌 | `Table`/`Box` 캡션에 연결된 표 구역 + 2-pass 본문 글꼴 추정으로 본문에서 분리 |
+| 제목·저자·소속 | 초록 위 영역을 분리해 판별. ORCID 아이콘 글리프와 위첨자 소속 기호는 제거하되 `van den`, `de` 같은 이름 조사는 보존 |
+| 저널·날짜·DOI | 출판사 자기인용문·러닝헤드·라벨 필드에서 복원하고 각각 페이지와 발췌를 기록 |
+| 스캔 페이지 | 로컬 Tesseract OCR 폴백 |
+| 문서 유형 분류 | 10종 문서 프로파일이 어떤 섹션과 근거 슬롯이 적용되는지 결정 |
+| 연구설계 분류 | 가중 어휘 점수화, 동점 시 문서 프로파일이 결정 |
+| 문장 중요도 | 표준 라이브러리만으로 구현한 LexRank(idf 가중 중첩 그래프) |
+| 다이제스트 작성 | 단어 예산 하에서 MMR(최대 주변 적합도) 기반 추출 선택 |
+| 날조 방지 | 컴파일 후 영숫자 스켈레톤 기준 원문 대조 검증 |
+| 얇은 섹션 | 단서 문장이 속한 문단을 통째로 가져오는 passage 확장 (단서 정의를 느슨하게 하지 않음) |
+| 근거 부족 | 최대 4회 자동 보완 후에도 부족하면 "원문에 없음"을 명시 |
+
 ## 95점 품질 계약
 
 - 정확한 11-key YAML과 8개 H2 섹션
-- 페이지 단위 근거 원장과 출처 범위 검사
-- 서지정보·저자·방법·결과·null 결과·한계 일관성 검사
-- 본문 길이·밀도·문단·정확/유사 중복 검사
+- **섹션별 최소 분량 하한** — 미달 시, 원문이 공급 가능했는지를 측정해 컴파일러 책임(오류)과 원문 한계(경고)를 구분
+- **모든 산문 문장이 원문의 축자 구간임을 컴파일 후에 검증** (가정하지 않고 확인)
+- 페이지 단위 근거 원장과 슬롯별 커버리지 원장
+- 서지정보·저자·방법·결과·null 결과·한계 일관성 검사, 각 값의 페이지 추적
+- 원문 길이에 비례하는 본문 길이 기준, 밀도·문단·중복·섹션 간 반복 검사
+- 체크리스트 행, 표 셀, 그림 범례, 인터뷰 인용문이 본문에 섞이지 않음
 - 영문 전체 질문 10개 이상의 BM25 검색 회귀검사
 - 누락된 근거를 만들어내지 않는 최대 4회의 자동 보완
 - 모든 hard gate와 0.95 이상 점수를 통과할 때만 `SOURCE_READY`
@@ -118,12 +147,54 @@ HTTP 200은 `SOURCE_READY`, HTTP 422는 MD 후보와 정확한 QA 미달 사유�
 ## 검증
 
 ```bash
-.venv/bin/ruff check apps/paper-digest/src tests scripts
-.venv/bin/ruff format --check apps/paper-digest/src tests scripts
+.venv/bin/ruff check --config apps/paper-digest/pyproject.toml apps/paper-digest/src tests scripts
+.venv/bin/ruff format --check --config apps/paper-digest/pyproject.toml apps/paper-digest/src tests scripts
 .venv/bin/pytest -q
 .venv/bin/python scripts/no-llm-audit.py .
 .venv/bin/python scripts/validate-release.py
 ```
+
+테스트는 `tests/synthetic.py`가 출판사 형태의 PDF(리포지터리 표지, 러닝헤드,
+2단 본문, 위첨자 저자행, 캡션 아래 작은 글씨 표, 참고문헌)를 직접 생성해
+레이아웃 분석까지 검증합니다. 실제 논문을 저장소에 넣지 않습니다.
+
+### 보유 논문으로 품질 측정하기
+
+```bash
+.venv/bin/python scripts/benchmark.py /경로/pdf폴더 --offline --markdown
+.venv/bin/python scripts/benchmark.py /경로/pdf폴더 --reference /경로/참조md폴더 --out report.json
+```
+
+`--reference` 없이 실행하면 인증률, 원문 대조 비율, 근거 커버리지,
+다이제스트/원문 비율, 검색 통과율을 보고합니다. `--reference`를 주면 참조
+Markdown(예: LLM으로 작성한 다이제스트)과 제목·DOI 일치, 저자 중첩, 숫자 재현율,
+섹션별 토큰 F1을 함께 비교합니다. 비교는 문자열·토큰 연산이며 모델을 쓰지
+않습니다.
+
+## LLM Wiki 소스 레코드 표준과의 호환
+
+출력은 [joonan30의 LLM Wiki 워크플로](https://gist.github.com/joonan30/cbce305684d079dbe9a3fbaefe4e3959)의
+`sources/` 단계를 대상으로 하며,
+[paper-to-llm-wiki-digest](https://github.com/wmyung/paper-to-llm-wiki-digest)의
+참조 표준으로 검증합니다. 이 저장소가 만든 레코드는 그쪽
+`validate_source_md.py --require-classification`와 `audit_source_density.py`를 통과합니다.
+
+의도적으로 다른 점이 하나 있습니다. 참조 검증기는 섹션이 하한에 미달하면 무조건
+하드 오류로 처리하지만, 이 컴파일러는 **원문이 그 섹션에 공급 가능한 인용 가능 단어 수를
+먼저 측정**합니다. 원문이 하한을 채울 수 없는 경우(예: 개발 절차가 240단어뿐인 짧은
+보고 지침) 미달 사유를 명시한 경고와 함께 인증하고, 논문 자체의 부족을 도구의 실패로
+표시하지 않습니다. 원문이 공급할 수 있는 것은 여전히 전부 요구합니다.
+
+`wiki/{category}/` 계층, 양방향 `[[overviews/...]]` synthesis 링크, `WIKI_INGESTED`
+상태는 **아직 구현되어 있지 않습니다.** 이 프로젝트는 `SOURCE_READY`에서 멈춥니다.
+
+### 규칙 기반의 한계 (솔직한 설명)
+
+출력의 모든 문장은 원문에서 그대로 가져온 구간입니다. 여러 위치(초록·본문·표·
+범례)의 정보를 한 문장으로 재서술하는 일은 하지 않습니다. 전문가가 쓸 법한
+"종합 문장"은 원문 어디에도 없기 때문입니다. 대신 이 도구는 원문에서 가장 좋은
+문장을 고르고, 숫자를 그 비교·방향과 함께 유지하며, 근거가 없으면 채우지 않고,
+아무것도 지어내지 않았음을 사후에 증명합니다.
 
 검색 키워드: `research-paper-digest-for-wikillm-without-LLM`, `WikiLLM paper
 digest`, `PDF to Markdown without LLM`, `연구논문 PDF Markdown`, `LLM 없는 논문

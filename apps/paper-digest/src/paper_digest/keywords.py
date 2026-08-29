@@ -117,7 +117,23 @@ def _candidate_ngrams(text: str) -> Counter[str]:
     return counts
 
 
-def extract_keyphrases(text: str, limit: int = 12, preferred: Iterable[str] = ()) -> list[str]:
+JUNK_TERM_RE = re.compile(r"^(?:[A-Z]{2,6}\d{1,3}|[A-Z]{2,6}[-+]|\d|.{0,2})$")
+
+
+def _drop_author_initials(terms: list[str], authors: Iterable[str]) -> list[str]:
+    """Author initials (MJP, JEM) look like acronyms but index nothing."""
+    initials = set()
+    for author in authors:
+        parts = [part for part in re.findall(r"[A-Za-z]+", author) if part]
+        if len(parts) >= 2:
+            initials.add("".join(part[0] for part in parts).upper())
+            initials.add((parts[0][0] + parts[-1][0]).upper())
+    return [term for term in terms if term.upper() not in initials]
+
+
+def extract_keyphrases(
+    text: str, limit: int = 12, preferred: Iterable[str] = (), authors: Iterable[str] = ()
+) -> list[str]:
     preferred_list = [str(value).strip() for value in preferred if str(value).strip()]
     cleaned = re.sub(r"\s+", " ", text)
     counts = _candidate_ngrams(cleaned)
@@ -134,4 +150,6 @@ def extract_keyphrases(text: str, limit: int = 12, preferred: Iterable[str] = ()
     )
     phrases = [phrase for phrase in ranked[: max(limit * 5, limit)]]
     acronyms = [item for item, count in Counter(ALL_CAPS_RE.findall(text)).most_common() if count >= 2]
-    return unique_preserve(preferred_list + acronyms + phrases)[:limit]
+    acronyms = _drop_author_initials([item for item in acronyms if not JUNK_TERM_RE.match(item)], authors)
+    candidates = [item for item in preferred_list + acronyms + phrases if not JUNK_TERM_RE.match(item)]
+    return unique_preserve(candidates)[:limit]

@@ -68,6 +68,16 @@ class AuthorMetadata:
 
 
 @dataclass(slots=True)
+class FieldEvidence:
+    """Where a bibliographic value came from, for the grounding ledger."""
+
+    value: str
+    source: str
+    page: int | None = None
+    source_excerpt: str = ""
+
+
+@dataclass(slots=True)
 class PublicationMetadata:
     title: str = ""
     authorship: AuthorMetadata = field(default_factory=AuthorMetadata)
@@ -87,7 +97,15 @@ class PublicationMetadata:
     research_fields: list[str] = field(default_factory=list)
     index_keywords: list[str] = field(default_factory=list)
     category: str = "other"
+    article_number: str = ""
+    issn: str = ""
+    revised_date: str = ""
+    publication_date: str = ""
+    publication_date_label: str = ""
+    abstract: str = ""
+    document_profile: str = "empirical_research"
     metadata_sources: list[str] = field(default_factory=list)
+    evidence: dict[str, FieldEvidence] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -117,6 +135,8 @@ class ParsedBundle:
     ocr_pages: list[int] = field(default_factory=list)
     figure_caption_count: int = 0
     table_caption_count: int = 0
+    grounding_text: str = ""
+    labelled_fields: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

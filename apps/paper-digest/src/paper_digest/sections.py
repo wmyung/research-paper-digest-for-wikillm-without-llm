@@ -3,84 +3,83 @@ from __future__ import annotations
 import re
 
 from .models import Paragraph, Section, TextBlock
+from .parsers.layout import PROSE_KINDS
 from .text import normalize_prose, word_count
 
 HEADING_ALIASES: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"abstract|summary", re.I), "Abstract"),
+    (re.compile(r"abstract|summary|plain language summary", re.I), "Abstract"),
     (re.compile(r"background|introduction|rationale", re.I), "Introduction"),
-    (re.compile(r"objectives?|aims?|purpose", re.I), "Objectives"),
+    (re.compile(r"objectives?|aims?|purpose|research questions?", re.I), "Objectives"),
     (
         re.compile(
-            r"methods?|materials(?: and methods)?|patients? and methods|participants?|"
-            r"study design|experimental procedures?|statistical analysis|online methods",
+            r"methods?|materials(?: and methods)?|methods? and materials|patients? and methods|participants?|"
+            r"study design|study population|experimental procedures?|statistical analys[ei]s|online methods|"
+            r"data collection|data analys[ei]s|search strategy|eligibility criteria|procedures?|"
+            r"development(?: of .{1,60})?|guideline development|consensus (?:process|procedure)|"
+            r"development and (?:validation|consensus)",
             re.I,
         ),
         "Methods",
     ),
-    (re.compile(r"results?|findings?|outcomes?", re.I), "Results"),
-    (re.compile(r"discussion", re.I), "Discussion"),
+    (
+        re.compile(
+            r"results?|findings?|outcomes?|recommendations?|checklist items?|"
+            r"the .{1,50} (?:statement|checklist|guideline)|how to use .{1,50}",
+            re.I,
+        ),
+        "Results",
+    ),
+    (re.compile(r"discussion|comment", re.I), "Discussion"),
     (re.compile(r"conclusions?|interpretation", re.I), "Conclusion"),
     (re.compile(r"limitations?|strengths and limitations", re.I), "Limitations"),
     (re.compile(r"data availability|availability of data", re.I), "Data availability"),
-    (re.compile(r"code availability|availability of code", re.I), "Code availability"),
+    (re.compile(r"code availability|availability of code|software availability", re.I), "Code availability"),
     (re.compile(r"references?|bibliography", re.I), "References"),
-    (re.compile(r"acknowledgements?|funding", re.I), "Acknowledgements"),
+    (re.compile(r"acknowledge?ments?|funding|financial support", re.I), "Acknowledgements"),
     (re.compile(r"author contributions?|contributors?", re.I), "Author contributions"),
-    (re.compile(r"competing interests?|conflicts? of interest", re.I), "Competing interests"),
+    (re.compile(r"competing interests?|conflicts? of interest|declaration of interests?", re.I), "Competing interests"),
+    (re.compile(r"ethics(?: statement| approval| and consent)?|consent", re.I), "Ethics"),
+    (re.compile(r"supporting information|supplementary (?:material|information|data)", re.I), "Supplementary"),
 ]
+# Sections that never contribute scientific claims to a digest.
+NON_SCIENTIFIC = frozenset({"References", "Acknowledgements", "Author contributions", "Competing interests", "Ethics"})
 
-HEADING_PREFIX_RE = re.compile(r"^(?:\d+(?:\.\d+)*[.)]?\s+)?([A-Za-z][A-Za-z &/-]{1,55}?)(?:\s*[:—.-]\s*|\s{2,})(.+)$")
 INLINE_HEADING_RE = re.compile(
     r"^(Abstract|Summary|Background|Introduction|Rationale|Objectives?|Aims?|Purpose|Methods?|"
     r"Materials and Methods|Results?|Findings?|Discussion|Conclusions?|Interpretation|Limitations?)"
-    r"\s*[:—.-]?\s+(.+)$",
+    r"\s*[:.]?\s+(?![a-z])(.+)$",
     re.I,
 )
+NUMBERED_PREFIX_RE = re.compile(r"^\s*(?:\d+(?:\.\d+)*[.)]?|[IVXivx]+\.)\s+")
 
 
 def _canonical_heading(text: str) -> str | None:
-    value = normalize_prose(text).strip(" :.–—")
-    value = re.sub(r"^\d+(?:\.\d+)*[.)]?\s+", "", value)
+    value = NUMBERED_PREFIX_RE.sub("", normalize_prose(text).strip(" :.–—"))
     for pattern, canonical in HEADING_ALIASES:
         if pattern.fullmatch(value):
             return canonical
     return None
 
 
-def _split_heading_prefix(text: str) -> tuple[str | None, str]:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if not lines:
-        return None, ""
-    first = normalize_prose(lines[0])
+def _split_inline_heading(text: str) -> tuple[str | None, str]:
+    """Structured abstracts fuse the label into the first sentence."""
+    first = normalize_prose(text)
     direct = _canonical_heading(first)
     if direct:
-        return direct, normalize_prose("\n".join(lines[1:]))
+        return direct, ""
     inline = INLINE_HEADING_RE.match(first)
     if inline:
         separator = first[inline.end(1) : inline.start(2)]
         heading = _canonical_heading(inline.group(1))
-        explicit_separator = any(mark in separator for mark in ":—.-")
-        if heading and (explicit_separator or inline.group(2)[:1].isupper()):
-            remainder = " ".join([inline.group(2), *lines[1:]])
-            return heading, normalize_prose(remainder)
-    match = HEADING_PREFIX_RE.match(first)
-    if match:
-        heading = _canonical_heading(match.group(1))
-        if heading:
-            remainder = " ".join([match.group(2), *lines[1:]])
-            return heading, normalize_prose(remainder)
-    # Structured abstracts commonly use a single space after a short label.
-    for pattern, canonical in HEADING_ALIASES:
-        prefix = re.match(r"^([A-Za-z][A-Za-z &/-]{1,30})\s+(.+)$", first)
-        if prefix and pattern.fullmatch(prefix.group(1)) and prefix.group(2)[:1].isupper():
-            remainder = " ".join([prefix.group(2), *lines[1:]])
-            return canonical, normalize_prose(remainder)
-    return None, normalize_prose(text)
+        if heading and (":" in separator or inline.group(2)[:1].isupper()):
+            return heading, normalize_prose(inline.group(2))
+    return None, first
 
 
 def segment_sections(blocks: list[TextBlock], source_file: str) -> dict[str, Section]:
     sections: dict[str, Section] = {"Front matter": Section("Front matter")}
     current = "Front matter"
+    subsection: str | None = None
     buffer: list[str] = []
     page_start = 1
     page_end = 1
@@ -96,25 +95,48 @@ def segment_sections(blocks: list[TextBlock], source_file: str) -> dict[str, Sec
                     page_start=page_start,
                     page_end=page_end,
                     source_file=source_file,
+                    subsection=subsection,
                 )
             )
         buffer = []
 
     for block in blocks:
-        if block.kind in {"header", "footer"}:
+        if block.kind not in PROSE_KINDS:
             continue
-        heading, remainder = _split_heading_prefix(block.text)
+        if block.kind == "heading":
+            flush()
+            canonical = _canonical_heading(block.text)
+            if canonical:
+                current = canonical
+                subsection = None
+            else:
+                subsection = normalize_prose(block.text)
+            page_start = page_end = block.page
+            continue
+        if block.kind == "abstract":
+            heading, remainder = _split_inline_heading(block.text)
+            if current != "Abstract":
+                flush()
+                current = "Abstract"
+                subsection = None
+                page_start = block.page
+            if heading and heading != "Abstract":
+                subsection = heading
+            text = remainder or normalize_prose(block.text)
+            if text:
+                page_end = block.page
+                buffer.append(text)
+            continue
+        heading, remainder = _split_inline_heading(block.text)
         if heading:
             flush()
             current = heading
-            sections.setdefault(current, Section(current))
-            page_start = block.page
-            page_end = block.page
+            subsection = None
+            page_start = page_end = block.page
             if remainder:
                 buffer.append(remainder)
             continue
-        text = remainder.strip()
-        if not text:
+        if not remainder:
             continue
         if not buffer:
             page_start = block.page
@@ -122,6 +144,6 @@ def segment_sections(blocks: list[TextBlock], source_file: str) -> dict[str, Sec
         if buffer and word_count(" ".join(buffer)) >= 150:
             flush()
             page_start = block.page
-        buffer.append(text)
+        buffer.append(remainder)
     flush()
     return sections

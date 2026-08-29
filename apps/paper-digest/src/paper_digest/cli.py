@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pdf-path", default=None, help="Repository path written to frontmatter.")
     parser.add_argument("--source-collection", default="publisher-pdf")
     parser.add_argument("--offline", action="store_true", help="Disable DOI-registry metadata repair.")
+    parser.add_argument(
+        "--verify-pdf-path",
+        action="store_true",
+        help="Require the canonical PDF to exist at the pdf_path written to frontmatter.",
+    )
     parser.add_argument("--json-only", action="store_true", help="Print JSON only; do not write files.")
     return parser
 
@@ -37,21 +42,23 @@ def main(argv: list[str] | None = None) -> int:
         pdf_path=args.pdf_path,
         source_collection=args.source_collection,
         enable_doi_metadata=not args.offline,
+        verify_pdf_path=args.verify_pdf_path,
     )
     result = digest_files(args.inputs, config)
     payload = result.to_dict(include_markdown=args.json_only)
     if args.json_only:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        md_path, qa_path = write_artifacts(result, args.output_dir)
+        paths = write_artifacts(result, args.output_dir)
         print(
             json.dumps(
                 {
                     "status": result.status,
-                    "markdown": str(md_path),
-                    "qa": str(qa_path),
+                    **paths.as_dict(),
                     "quality_score": result.qa.get("quality_score"),
+                    "document_profile": result.qa.get("document_profile"),
                     "errors": result.qa.get("errors", []),
+                    "warnings": result.qa.get("warnings", []),
                 },
                 ensure_ascii=False,
                 indent=2,

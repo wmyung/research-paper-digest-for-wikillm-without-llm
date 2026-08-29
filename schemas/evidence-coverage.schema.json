@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/wikillm-paper-digest-evidence-coverage.schema.json",
+  "title": "Evidence coverage ledger",
+  "description": "Slot-by-slot coverage of the resolved document profile. A slot with no supporting source text is reported as absent, never filled in.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "document_profile",
+    "slots",
+    "covered_slots",
+    "applicable_slots",
+    "coverage_ratio",
+    "unchecked_slots",
+    "absent_required_slots"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "2.0" },
+    "document_profile": {
+      "type": "string",
+      "enum": [
+        "empirical_research",
+        "systematic_review_meta_analysis",
+        "methods_tool",
+        "study_protocol",
+        "narrative_review",
+        "case_report",
+        "guideline_consensus",
+        "editorial_commentary",
+        "letter_response_correspondence",
+        "excluded_non_paper"
+      ]
+    },
+    "document_profile_label": { "type": "string" },
+    "source_word_count": { "type": "integer", "minimum": 0 },
+    "source_page_count": { "type": "integer", "minimum": 0 },
+    "slots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "md_heading", "applicable", "status", "evidence_locations"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "md_heading": { "type": "string" },
+          "applicable": { "type": "boolean" },
+          "status": {
+            "type": "string",
+            "enum": ["covered", "absent_in_source", "not_applicable", "unchecked"],
+            "description": "'unchecked' is never emitted by this pipeline and is a hard QA error if present."
+          },
+          "evidence_locations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["section", "page", "matched", "source_excerpt"],
+              "properties": {
+                "section": { "type": "string" },
+                "subsection": { "type": ["string", "null"] },
+                "page": { "type": "integer", "minimum": 1 },
+                "matched": { "type": "string" },
+                "source_excerpt": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "covered_slots": { "type": "integer", "minimum": 0 },
+    "covered_optional_slots": { "type": "integer", "minimum": 0 },
+    "applicable_slots": { "type": "integer", "minimum": 0 },
+    "coverage_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+    "unchecked_slots": { "type": "array", "items": { "type": "string" }, "maxItems": 0 },
+    "absent_required_slots": { "type": "array", "items": { "type": "string" } },
+    "digest_sections_populated": { "type": "object" },
+    "major_tables": { "type": "array", "items": { "type": "string" } },
+    "major_figures": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  }
+}

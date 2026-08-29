@@ -26,6 +26,30 @@ class DigestConfig:
     hard_max_body_words: int = 6000
     paragraph_soft_max_words: int = 220
     paragraph_hard_max_words: int = 350
+    # Retrieval units read better short: the reference records average about
+    # 45 words per prose unit and never exceed 110.
+    paragraph_pack_target_words: int = 110
+    # Per-section floors from the WikiLLM source-record standard. A section
+    # below its floor is under-developed even when the whole body is long
+    # enough, so the compiler expands that target specifically.
+    section_min_words: dict[str, int] = field(
+        default_factory=lambda: {
+            "summary": 20,
+            "information": 120,
+            "contributions": 100,
+            "methods": 300,
+            "results": 400,
+            "limitations": 150,
+            "related": 80,
+            "glossary": 60,
+        }
+    )
+    min_contribution_items: int = 3
+    max_contribution_items: int = 7
+    min_glossary_entries: int = 5
+    max_document_information_words: int = 750
+    verify_pdf_path: bool = False
+    max_authors_characters: int = 6000
     retrieval_top_k: int = 10
     work_dir: Path | None = None
     include_qa: bool = True
@@ -64,6 +88,12 @@ class DigestConfig:
             raise ValueError("paragraph_hard_max_words must be >= paragraph_soft_max_words.")
         if self.max_authors_full < 1:
             raise ValueError("max_authors_full must be positive.")
+        if self.paragraph_pack_target_words > self.paragraph_soft_max_words:
+            raise ValueError("paragraph_pack_target_words must be <= paragraph_soft_max_words.")
+        if not self.min_contribution_items <= self.max_contribution_items:
+            raise ValueError("min_contribution_items must be <= max_contribution_items.")
+        if self.max_authors_characters < 500:
+            raise ValueError("max_authors_characters is implausibly small.")
         if self.keyword_limit < 6 or self.keyword_limit > 15:
             raise ValueError("keyword_limit must be between 6 and 15.")
         if self.field_limit < 2 or self.field_limit > 6:
