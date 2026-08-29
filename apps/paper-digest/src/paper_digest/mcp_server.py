@@ -43,15 +43,19 @@ def digest_research_paper(
         inputs,
         DigestConfig(profile=profile, enable_doi_metadata=not offline),
     )
-    markdown_path, qa_path = write_artifacts(result, destination)
+    paths = write_artifacts(result, destination)
     return {
         "success": result.status == "SOURCE_READY",
         "status": result.status,
         "version": __version__,
-        "markdown_path": str(markdown_path),
-        "qa_path": str(qa_path),
+        "markdown_path": str(paths.markdown),
+        "qa_path": str(paths.qa),
+        "metadata_evidence_path": str(paths.metadata_evidence),
+        "evidence_coverage_path": str(paths.evidence_coverage),
+        "document_profile": result.qa.get("document_profile"),
         "quality_score": result.qa.get("quality_score"),
         "errors": result.qa.get("errors", []),
+        "warnings": result.qa.get("warnings", []),
         "llm_used": False,
         "external_paper_content_sent": False,
     }

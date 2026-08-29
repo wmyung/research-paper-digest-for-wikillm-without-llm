@@ -9,6 +9,7 @@ from typing import Iterable
 
 from .compiler import compile_markdown
 from .config import DigestConfig
+from .evidence import metadata_ledger
 from .inventory import inventory
 from .metadata import enrich_from_doi_registry, extract_publication_metadata
 from .models import CompiledDigest, ParsedBundle, WorkbookSheet
@@ -117,6 +118,8 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
         ocr_pages=canonical_extraction.ocr_pages,
         figure_caption_count=canonical_extraction.figure_caption_count,
         table_caption_count=canonical_extraction.table_caption_count,
+        grounding_text=canonical_extraction.grounding_text,
+        labelled_fields={item.label: item.value for item in canonical_extraction.metadata_fields},
     )
 
 
@@ -147,6 +150,10 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
                 config=config,
                 evidence=content.evidence,
                 retrieval_queries=content.retrieval_queries,
+                coverage=getattr(profile, "coverage", {}),
+                document_profile=bundle.metadata.document_profile,
+                metadata_ledger=metadata_ledger(bundle),
+                authored=content.authored,
             )
             qa["repair_pass"] = repair_pass + 1
             qa["repair_passes_allowed"] = config.repair_passes

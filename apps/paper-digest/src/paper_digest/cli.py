@@ -43,15 +43,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_only:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        md_path, qa_path = write_artifacts(result, args.output_dir)
+        paths = write_artifacts(result, args.output_dir)
         print(
             json.dumps(
                 {
                     "status": result.status,
-                    "markdown": str(md_path),
-                    "qa": str(qa_path),
+                    **paths.as_dict(),
                     "quality_score": result.qa.get("quality_score"),
+                    "document_profile": result.qa.get("document_profile"),
                     "errors": result.qa.get("errors", []),
+                    "warnings": result.qa.get("warnings", []),
                 },
                 ensure_ascii=False,
                 indent=2,

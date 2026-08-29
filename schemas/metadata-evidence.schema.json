@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/wikillm-paper-digest-metadata-evidence.schema.json",
+  "title": "Bibliographic evidence ledger",
+  "description": "For each resolved bibliographic value, the path that resolved it, the page it was read from, and the verbatim source excerpt.",
+  "type": "object",
+  "required": ["schema_version", "pdf_filename", "status", "fields"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "2.0" },
+    "pdf_filename": { "type": "string", "pattern": "\\.pdf$" },
+    "status": { "type": "string", "enum": ["SOURCE_READY", "NOT_SOURCE_READY"] },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "value", "source", "page", "source_excerpt"],
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "Frontmatter or classification field this entry justifies.",
+            "enum": [
+              "title",
+              "authors",
+              "journal",
+              "doi",
+              "year",
+              "publication_date",
+              "article_type",
+              "author_keywords",
+              "abstract"
+            ]
+          },
+          "value": { "type": "string" },
+          "source": {
+            "type": "string",
+            "description": "Resolution path that won, for example 'publisher citation string' or 'running head'."
+          },
+          "page": { "type": ["integer", "null"], "minimum": 1 },
+          "source_excerpt": { "type": "string" }
+        }
+      }
+    }
+  }
+}

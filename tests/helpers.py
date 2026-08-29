@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from paper_digest.models import AuthorMetadata, ParsedBundle, PublicationMetadata, Section
+from paper_digest.models import (
+    AuthorMetadata,
+    ParsedBundle,
+    PublicationMetadata,
+    Section,
+)
 
 
 def bundle(tmp_path: Path, text: str = "") -> ParsedBundle:

@@ -1,3 +1,8 @@
-"""Deterministic academic paper compiler for Joonan-compatible LLM Wiki Markdown."""
+"""Deterministic research-paper compiler for WikiLLM source Markdown.
 
-__version__ = "1.3.1"
+Every prose sentence in the output is a verbatim span of the source PDF, and
+`paper_digest.grounding` re-checks that after compilation. No generative,
+embedding, reranking or vision-language model is loaded or called.
+"""
+
+__version__ = "2.0.0"

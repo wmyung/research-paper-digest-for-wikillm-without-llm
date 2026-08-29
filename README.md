@@ -9,9 +9,10 @@
 
 WikiLLM Paper Digest turns a research-paper PDF and optional supplements into
 grounded, searchable WikiLLM source Markdown. It uses deterministic layout
-parsing, OCR, section rules, extractive evidence ranking, automatic repair
-passes, and BM25 retrieval regression—without a generative model, embedding
-model, reranker, VLM, model API key, or GPU.
+analysis, OCR, document profiles, feature-based extractive evidence ranking with
+LexRank centrality, automatic repair passes, a post-hoc verbatim grounding audit,
+and BM25 retrieval regression—without a generative model, embedding model,
+reranker, VLM, model API key, or GPU.
 
 It is inspired by **[Firecrawl](https://github.com/firecrawl/firecrawl)** and
 includes an optional Firecrawl v2 overlay. It is built to produce source files
@@ -85,11 +86,17 @@ python3 -m venv .venv
 .venv/bin/paper-digest --offline paper.pdf -o output
 ```
 
-Every run writes two files:
+Every run writes four files:
 
 - `*.md` — the grounded WikiLLM source Markdown candidate;
 - `*.qa.json` — the score, hard-gate checks, retrieval regressions, and exact
-  unresolved gaps.
+  unresolved gaps;
+- `*.metadata-evidence.json` — for each bibliographic value, where it came from,
+  on which page, and the verbatim excerpt it was read from;
+- `*.evidence-coverage.json` — which evidence slots of the resolved document
+  profile the source actually covers, and which it does not.
+
+See [Evidence Ledgers](docs/EVIDENCE_LEDGERS.md) for how to read the last two.
 
 The process exits `0` only for `SOURCE_READY`; an uncertified result exits `2`
 while still writing both artifacts.
@@ -140,11 +147,18 @@ must treat only `SOURCE_READY` as certified.
 
 | Capability | Implementation |
 |---|---|
-| Layout and reading order | PyMuPDF blocks, coordinates, fonts, two-column rules |
+| Reading order | Column bands from an x-coverage histogram, not content-stream order |
+| Running heads, cover sheets | Cross-page recurrence with digits masked; repository cover sheets detected and excluded |
+| Tables, captions, references | Caption-anchored table zones and a two-pass body-font estimate keep display matter out of the prose |
+| Title, byline, affiliations | Front-matter zoning above the abstract; ORCID glyphs and superscript keys stripped without touching names |
+| Journal, dates, DOI | Publisher self-citations, running heads and labelled fields, each recorded with its page and excerpt |
 | Scanned pages | Local Tesseract OCR fallback |
-| Study-design routing | Finite lexical and structural scoring |
-| Digest writing | Extractive, page-grounded evidence selection |
-| Missing coverage | Up to four deterministic repair passes |
+| Document routing | Ten document profiles decide which sections apply and which evidence slots exist |
+| Study-design routing | Weighted lexical scoring, with the document profile breaking ties |
+| Sentence importance | Standard-library LexRank over an idf-weighted overlap graph |
+| Digest writing | Extractive selection by maximal-marginal-relevance under a word budget |
+| Fabrication control | Post-hoc verbatim grounding audit over the alphanumeric skeleton |
+| Missing coverage | Up to four deterministic repair passes, then an explicit statement of absence |
 | Retrieval validation | BM25 full-question regression suite |
 | Bibliographic repair | Optional DOI-only Crossref lookup |
 | LLM, embedding, VLM calls | None |
@@ -165,10 +179,15 @@ The compiler does not claim success because it produced text. `SOURCE_READY`
 requires every hard gate and a quality score of at least `0.95`.
 
 - exact 11-key YAML frontmatter and eight required H2 sections;
-- page-addressable evidence ledger;
-- authorship and bibliographic consistency checks;
+- **every prose sentence verified as a verbatim span of the source**, checked
+  after compilation rather than assumed;
+- a page-addressable evidence ledger and a per-slot coverage ledger;
+- authorship and bibliographic consistency checks, each value traced to its page;
 - methods, results, null-result, and limitation boundaries;
-- length, density, paragraph, exact-duplicate, and near-duplicate checks;
+- source-relative length, density, paragraph, duplicate, and cross-section
+  repetition checks;
+- no checklist rows, table cells, figure legends, or interview quotations in the
+  prose;
 - at least ten full research-question BM25 regressions;
 - no invented value when the source does not contain the required evidence.
 
@@ -227,12 +246,31 @@ output. See [Firecrawl Integration](docs/FIRECRAWL_INTEGRATION.md).
 ## Verification
 
 ```bash
-.venv/bin/ruff check apps/paper-digest/src tests scripts
-.venv/bin/ruff format --check apps/paper-digest/src tests scripts
+.venv/bin/ruff check --config apps/paper-digest/pyproject.toml apps/paper-digest/src tests scripts
+.venv/bin/ruff format --check --config apps/paper-digest/pyproject.toml apps/paper-digest/src tests scripts
 .venv/bin/pytest -q
 .venv/bin/python scripts/no-llm-audit.py .
 .venv/bin/python scripts/validate-release.py
 ```
+
+The test suite builds publisher-shaped PDFs in `tests/synthetic.py` — repository
+cover sheet, running head, two-column body, superscript byline, small-print table
+under its caption, reference list — so layout analysis is exercised end to end
+without committing anyone's paper.
+
+### Measuring quality on your own corpus
+
+```bash
+.venv/bin/python scripts/benchmark.py /path/to/pdfs --offline --markdown
+.venv/bin/python scripts/benchmark.py /path/to/pdfs --reference /path/to/reference-md --out report.json
+```
+
+Without `--reference` the report covers certification rate, grounding ratio,
+evidence coverage, digest-to-source ratio, and retrieval pass rate. With
+`--reference` it additionally compares each record against a reference Markdown
+file — for example one written with an LLM — on title and DOI agreement, author
+overlap, numeric recall, and per-section token F1. The comparison is string and
+token arithmetic; no model is involved.
 
 Private E2E inputs can be supplied through `PAPER_DIGEST_E2E_PDF` and related
 environment variables. They are processed locally and never copied into this
@@ -249,8 +287,9 @@ MCP Agent Tool ────┤       layout / OCR / evidence / repair / BM25 gat
 Firecrawl Overlay ─┘
 ```
 
-See [Architecture](docs/ARCHITECTURE.md), [Compatibility](docs/COMPATIBILITY.md),
-and [Profile Authoring](docs/PROFILE_AUTHORING.md).
+See [Architecture](docs/ARCHITECTURE.md), [Document Profiles](docs/DOCUMENT_PROFILES.md),
+[Evidence Ledgers](docs/EVIDENCE_LEDGERS.md), [Quality Gates](docs/QUALITY_GATES.md),
+[Compatibility](docs/COMPATIBILITY.md), and [Profile Authoring](docs/PROFILE_AUTHORING.md).
 
 ---
 

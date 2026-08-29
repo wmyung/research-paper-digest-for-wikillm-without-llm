@@ -41,14 +41,17 @@ def ascii_tokens(text: str) -> list[str]:
 
 
 def surname_from_author(author: str) -> str:
+    """Filename surname for the first author, or "paper" when it is unusable.
+
+    A scanned or malformed byline must degrade to a NOT_SOURCE_READY record,
+    never crash the run.
+    """
     author = author.strip()
     if not author:
-        raise ValueError("First-author name is empty.")
+        return "paper"
     candidate = author.split(",", 1)[0] if "," in author else author.split()[-1]
-    tokens = ascii_tokens(candidate)
-    if not tokens:
-        raise ValueError(f"Could not derive a filename surname from {author!r}.")
-    return "-".join(tokens)
+    tokens = [token for token in ascii_tokens(candidate) if not token.isdigit()]
+    return "-".join(tokens) if tokens else "paper"
 
 
 def make_stem(metadata: PublicationMetadata, title_token_count: int = 5) -> str:

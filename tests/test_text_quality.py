@@ -1,11 +1,20 @@
+"""Text normalisation and candidate hygiene."""
+
+from __future__ import annotations
+
 from pathlib import Path
 
 from paper_digest.models import Paragraph, ParsedBundle, PublicationMetadata, Section
-from paper_digest.profiles.universal import _sentences
-from paper_digest.text import clean_line, normalize_prose
+from paper_digest.selection import build_candidates
+from paper_digest.text import (
+    clean_line,
+    has_finite_verb,
+    normalize_prose,
+    split_sentences,
+)
 
 
-def _bundle_with_results(*paragraphs: str) -> ParsedBundle:
+def _results_bundle(*paragraphs: str) -> ParsedBundle:
     return ParsedBundle(
         files=[],
         canonical_pdf=Path("synthetic.pdf"),
@@ -28,55 +37,49 @@ def _bundle_with_results(*paragraphs: str) -> ParsedBundle:
 
 
 def test_soft_hyphens_are_removed_without_joining_to_compounds():
-    assert normalize_prose("psychiatric dis\u00ad orders and low-to moderate effects") == (
+    assert normalize_prose("psychiatric dis­ orders and low-to moderate effects") == (
         "psychiatric disorders and low-to-moderate effects"
     )
-    first = clean_line("occu\u00ad")
+    first = clean_line("occu­")
     second = clean_line("pations were classified")
     assert normalize_prose(first + "\n" + second) == "occupations were classified"
 
 
-def test_caption_and_incomplete_pdf_fragments_are_not_candidates():
-    bundle = _bundle_with_results(
+def test_suspended_hyphens_survive_de_hyphenation():
+    assert normalize_prose("author- and index-level terms") == "author- and index-level terms"
+    assert normalize_prose("sys-\ntematic reviews") == "systematic reviews"
+
+
+def test_finite_verb_probe_separates_clauses_from_table_cells():
+    assert has_finite_verb("Accuracy was higher in the layout-aware pipeline.")
+    assert not has_finite_verb("Publisher Layout Records Baseline")
+
+
+def test_sentence_splitting_protects_abbreviations_and_decimals():
+    assert split_sentences("Accuracy was 94.1% (e.g. Fig. 2). The baseline lagged.") == [
+        "Accuracy was 94.1% (e.g. Fig. 2).",
+        "The baseline lagged.",
+    ]
+
+
+def test_captions_fragments_and_publisher_noise_are_not_candidates():
+    bundle = _results_bundle(
         "The GWAS identified 25 lead variants across 18 loci.",
-        "The dashed line indicates the significance threshold at P < 0.05. c.",
-        "The threshold for significance is indicated by the red horizontal line.",
-        "The adjusted model showed concordance with the initial model (rg = 0.948 and rho",
-        "It was interesting to find that the estimate was not significant at FDR < Interestingly, another result differed.",
-        "Polygenic overlap between both traits In MiXeR analysis (Figure S5), MD.",
-        "Two traits were not significant but are included in this figure.",
+        "Figure 3. The dashed line indicates the significance threshold at P < 0.05.",
+        "Specify the methods used to assess risk of bias in the included studies.",
+        "Record — The title or abstract of a report indexed in a database such as Medline.",
+        "This article is distributed under the terms of the Creative Commons Attribution licence.",
+        "Publisher Layout Records Baseline Layout-aware",
         "showed the most genetic overlap with the outcome (DC = 96%).",
-        "Our results are clinically relevant, as patients CRediT authorship contribution statement Author: Writing.",
-        "Venn diagrams depicting the shared variants between the two traits are shown.",
+        "However, of We encourage readers to submit further evidence about the recommendations.",
     )
-    assert [candidate.text for candidate in _sentences(bundle)] == [
+    assert [candidate.text for candidate in build_candidates(bundle)] == [
         "The GWAS identified 25 lead variants across 18 loci."
     ]
 
 
-def test_fused_publisher_subheading_is_removed():
-    bundle = _bundle_with_results(
-        "Genome-wide significant association signals and candidate causal genes "
-        "The GWAS identified 25 lead variants across 18 significant loci."
+def test_leading_citation_markers_are_removed_from_retained_sentences():
+    bundle = _results_bundle("[12] Accuracy improved from 71.8% to 94.1% across the nine publishers studied.")
+    assert build_candidates(bundle)[0].text == (
+        "Accuracy improved from 71.8% to 94.1% across the nine publishers studied."
     )
-    assert [candidate.text for candidate in _sentences(bundle)] == [
-        "The GWAS identified 25 lead variants across 18 significant loci."
-    ]
-
-
-def test_embedded_and_repeated_publisher_subheadings_are_removed():
-    bundle = _bundle_with_results(
-        "There was no strong enrichment among the tested tissue categories. "
-        "Genetic correlation with psychiatric disorders "
-        "Seven psychiatric disorders were significantly correlated with the outcome.",
-        "PRSs for psychiatric disorders and associations with OC "
-        "PRSs for seven disorders were significantly associated with the outcome.",
-        "CondFDR for psychiatric disorders and OC "
-        "The results identified several additional loci across psychiatric disorders.",
-    )
-    assert [candidate.text for candidate in _sentences(bundle)] == [
-        "There was no strong enrichment among the tested tissue categories.",
-        "Seven psychiatric disorders were significantly correlated with the outcome.",
-        "PRSs for seven disorders were significantly associated with the outcome.",
-        "The results identified several additional loci across psychiatric disorders.",
-    ]

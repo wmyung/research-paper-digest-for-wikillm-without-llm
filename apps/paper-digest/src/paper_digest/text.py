@@ -79,7 +79,8 @@ def normalize_prose(text: str) -> str:
     text = dehyphenate(text)
     text = re.sub(r"\s*\n\s*", " ", text)
     text = re.sub(r"\b(low|high|mid|short|long|moderate)-to\s*([a-z])", r"\1-to-\2", text, flags=re.I)
-    text = re.sub(r"([A-Za-z]{2,})-\s+([a-z]{2,})", r"\1\2", text)
+    # "author- and index-level" is a suspended hyphen, not a line break.
+    text = re.sub(r"([A-Za-z]{2,})-\s+(?!(?:and|or|to|in|of|for|nor|but)\b)([a-z]{2,})", r"\1\2", text)
     text = re.sub(r"([A-Za-z0-9])-\s+([A-Z0-9])", r"\1-\2", text)
     text = SPACE_RE.sub(" ", text)
     text = MULTISPACE_RE.sub(" ", text)
@@ -111,6 +112,49 @@ def split_sentences(text: str) -> list[str]:
         if part:
             output.append(part)
     return output
+
+
+# Auxiliaries plus the finite research verbs that carry a claim. The probe is
+# deliberately lexical: it separates clauses from table cells and checklist
+# rows, which is all the selection layer needs from it.
+_AUXILIARY = (
+    r"is|are|was|were|be|been|being|am|has|have|had|do|does|did|can|could|may|might|must|shall|"
+    r"should|will|would|we|it|they|there"
+)
+_FINITE_VERBS = (
+    r"identified|showed|shows|found|finds|reported|reports|observed|observes|estimated|estimates|"
+    r"measured|measures|increased|increases|decreased|decreases|revealed|reveals|demonstrated|"
+    r"demonstrates|included|includes|examined|examines|evaluated|evaluates|assessed|assesses|"
+    r"compared|compares|associated|associates|yielded|yields|achieved|achieves|exceeded|exceeds|"
+    r"remained|remains|occurred|occurs|contributed|contributes|explained|explains|predicted|"
+    r"predicts|detected|detects|confirmed|confirms|replicated|replicates|validated|validates|"
+    r"developed|develops|applied|applies|performed|performs|conducted|conducts|analysed|analyzed|"
+    r"analyses|calculated|calculates|derived|derives|ranged|ranges|differed|differs|varied|varies|"
+    r"consisted|consists|comprised|comprises|accounted|accounts|enabled|enables|allowed|allows|"
+    r"required|requires|provided|provides|suggested|suggests|indicated|indicates|used|uses|"
+    r"led|gave|gives|made|makes|took|takes|saw|sees|became|becomes|appeared|appears|emerged|"
+    r"emerges|declined|declines|rose|rises|fell|falls|recruited|recruits|screened|screens|"
+    r"selected|selects|retained|retains|replaced|replaces|updated|updates|recommend|recommends"
+)
+_AUXILIARY_RE = re.compile(rf"\b(?:{_AUXILIARY})\b", re.I)
+_FINITE_VERB_RE = re.compile(rf"\b(?:{_FINITE_VERBS})\b", re.I)
+# A regular past-tense form followed by an argument is finite enough.
+_INFLECTED_RE = re.compile(
+    r"\b[a-z]{3,}(?:ed|ied)\b\s+(?:\d|the|a|an|that|to|in|with|by|from|for|on|at|as|no|its|"
+    r"their|this|these|significant|substantial|only|more|less|higher|lower)\b",
+    re.I,
+)
+_INFLECTED_TAIL_RE = re.compile(r"\b[a-z]{3,}(?:ed|es|s)\b\s+(?:by|in|to|with|from|that|the|a|an|as|for|on)\b", re.I)
+
+
+def has_finite_verb(text: str) -> bool:
+    """Cheap finite-verb probe; table cells and checklist rows rarely have one."""
+    return bool(
+        _AUXILIARY_RE.search(text)
+        or _FINITE_VERB_RE.search(text)
+        or _INFLECTED_RE.search(text)
+        or _INFLECTED_TAIL_RE.search(text)
+    )
 
 
 def word_count(text: str) -> int:
