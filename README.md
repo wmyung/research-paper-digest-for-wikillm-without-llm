@@ -307,10 +307,6 @@ example — the record is certified with an explicit warning naming the shortfal
 and its cause, rather than failed for a deficiency in the paper. Everything the
 source *can* supply is still required.
 
-The `wiki/{category}/` tier, bidirectional `[[overviews/...]]` synthesis links,
-and the `WIKI_INGESTED` state are **not** implemented here; this project stops at
-`SOURCE_READY`.
-
 See [Architecture](docs/ARCHITECTURE.md), [Document Profiles](docs/DOCUMENT_PROFILES.md),
 [Evidence Ledgers](docs/EVIDENCE_LEDGERS.md), [Quality Gates](docs/QUALITY_GATES.md),
 [Compatibility](docs/COMPATIBILITY.md), and [Profile Authoring](docs/PROFILE_AUTHORING.md).
