@@ -10,16 +10,21 @@ import zipfile
 from hashlib import sha256
 from pathlib import Path
 
+# Installed dependencies and local caches are never part of a release: they
+# bloat the archive and they are not the source anyone is meant to review.
 EXCLUDED_PARTS = {
     "__pycache__",
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
     ".git",
+    ".github",
     ".venv",
     "venv",
+    "node_modules",
     "dist",
     "build",
+    ".DS_Store",
 }
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 
@@ -73,12 +78,24 @@ def write_sha_sidecar(archive: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--output-dir", type=Path, default=Path("/mnt/data"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "dist",
+        help="Where to write the release archives (default: dist/ beside the repository).",
+    )
+    parser.add_argument(
+        "--name",
+        default=None,
+        help="Archive base name (default: the checkout directory name).",
+    )
     args = parser.parse_args()
 
     root = args.root.resolve()
     output = args.output_dir.resolve()
-    name = root.name
+    # A checkout can sit in a directory with any name; do not let that decide
+    # what the published archive is called.
+    name = args.name or root.name
     if not (root / "README.md").is_file() or not (root / "apps/paper-digest").is_dir():
         raise SystemExit(f"Not a release root: {root}")
 
