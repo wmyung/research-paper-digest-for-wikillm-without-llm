@@ -101,6 +101,17 @@ See [Evidence Ledgers](docs/EVIDENCE_LEDGERS.md) for how to read the last two.
 The process exits `0` only for `SOURCE_READY`; an uncertified result exits `2`
 while still writing both artifacts.
 
+#### Throughput
+
+Roughly **2-3 seconds per paper** on one core for an ordinary journal article
+with a text layer, so about **1,500 papers per hour per core**. Papers are
+independent, so this scales with cores: a 10-core laptop reaches five figures an
+hour.
+
+Two things make it much slower. A scanned page falls back to OCR and costs
+seconds *per page*. A several-hundred-page book costs tens of seconds. A mixed
+corpus of articles, scans and books measured about 10 seconds per document.
+
 ### 2. Private Local Web App
 
 ```bash
