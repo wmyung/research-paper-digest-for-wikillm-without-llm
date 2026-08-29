@@ -58,11 +58,23 @@ output. A representative empirical paper went from two hard failures to none.
 - Prose units are packed to 110 words rather than 170, matching the reference
   records, which average about 45 words per unit and never exceed 110.
 
+### Release packaging
+
+- `scripts/build-release.py` no longer packages `node_modules`, `.git`,
+  `.github` or `.DS_Store`. The archive was 4.5 MB across 236 files; it is now
+  215 KB across 103.
+- The output directory defaults to `dist/` beside the repository rather than an
+  absolute `/mnt/data` path that existed only on one machine.
+- A new `--name` option decides the archive name, so a checkout sitting in a
+  directory with a different name still produces correctly named archives.
+
 ### Tests
 
 - The synthetic fixture is now a realistic 1,700-word paper with a full
   acronym set, so the end-to-end test exercises the density gates rather than
-  passing on a stub. Suite: 102 tests.
+  passing on a stub.
+- New `tests/test_release_archive.py` covers what the release archive may and
+  may not contain. Suite: 113 tests.
 
 ## 2.0.0
 
