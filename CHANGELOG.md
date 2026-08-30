@@ -43,6 +43,14 @@ gates instead.
 - `enable_stage2` (default true), `stage2_min_score` (default 0.70) and
   `stage2_max_rounds` (default 3).
 
+### Repository
+
+- Renamed from `research-paper-digest-for-wikillm-without-llm` to
+  `wikillm-digest-noLLM`. GitHub redirects the previous URL, and the old name is
+  kept as a discovery keyword in both READMEs. The product name
+  ("WikiLLM Paper Digest"), the Python distribution (`wikillm-paper-digest`) and
+  the `paper-digest` commands are unchanged.
+
 ## 2.1.0
 
 Aligned the record with the LLM Wiki source-record standard published in

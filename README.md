@@ -72,8 +72,8 @@ Markdown contract and QA evidence.
 ## Quick Start
 
 ```bash
-git clone git@github.com:wmyung/research-paper-digest-for-wikillm-without-llm.git
-cd research-paper-digest-for-wikillm-without-llm
+git clone git@github.com:wmyung/wikillm-digest-noLLM.git
+cd wikillm-digest-noLLM
 python3 -m venv .venv
 .venv/bin/python -m pip install -e "apps/paper-digest[dev]"
 ```
@@ -327,7 +327,7 @@ See [Architecture](docs/ARCHITECTURE.md), [Document Profiles](docs/DOCUMENT_PROF
 
 ## Keywords for Discovery
 
-`research-paper-digest-for-wikillm-without-LLM`, `research paper PDF to
+`wikillm-digest-noLLM`, `research-paper-digest-for-wikillm-without-LLM`, `research paper PDF to
 Markdown`, `PDF to Markdown without LLM`, `WikiLLM paper digest`, `WikiLLM
 sources`, `academic paper parser`, `scientific paper extraction`, `deterministic
 PDF extraction`, `offline paper digest`, `local-first research tools`, `no LLM

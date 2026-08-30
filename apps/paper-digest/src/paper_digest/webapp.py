@@ -51,7 +51,7 @@ def app_html(version: str) -> str:
 <main>
   <header>
     <div>
-      <div class="eyebrow">research-paper-digest-for-wikillm-without-LLM</div>
+      <div class="eyebrow">wikillm-digest-noLLM</div>
       <h1>WikiLLM Paper Digest</h1>
       <p class="lede">연구논문 PDF와 보충자료를 LLM 호출 없이 근거 추적 가능한 WikiLLM 소스 Markdown으로 변환합니다.</p>
     </div>

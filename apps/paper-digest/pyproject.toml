@@ -52,9 +52,9 @@ paper-digest-web = "paper_digest.web_cli:main"
 paper-digest-mcp = "paper_digest.mcp_server:main"
 
 [project.urls]
-Homepage = "https://github.com/wmyung/research-paper-digest-for-wikillm-without-llm"
-Documentation = "https://github.com/wmyung/research-paper-digest-for-wikillm-without-llm#readme"
-Source = "https://github.com/wmyung/research-paper-digest-for-wikillm-without-llm"
+Homepage = "https://github.com/wmyung/wikillm-digest-noLLM"
+Documentation = "https://github.com/wmyung/wikillm-digest-noLLM#readme"
+Source = "https://github.com/wmyung/wikillm-digest-noLLM"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

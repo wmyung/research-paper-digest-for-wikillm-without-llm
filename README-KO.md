@@ -1,6 +1,6 @@
 # WikiLLM Paper Digest
 
-**research-paper-digest-for-wikillm-without-LLM — CLI, 로컬 웹앱, MCP 서버를 모두 제공하는 연구논문 변환기입니다.**
+**wikillm-digest-noLLM — CLI, 로컬 웹앱, MCP 서버를 모두 제공하는 연구논문 변환기입니다.**
 
 [English README](README.md)
 
@@ -220,7 +220,7 @@ Markdown(예: LLM으로 작성한 다이제스트)과 제목·DOI 일치, 저자
 문장을 고르고, 숫자를 그 비교·방향과 함께 유지하며, 근거가 없으면 채우지 않고,
 아무것도 지어내지 않았음을 사후에 증명합니다.
 
-검색 키워드: `research-paper-digest-for-wikillm-without-LLM`, `WikiLLM paper
+검색 키워드: `wikillm-digest-noLLM`, `research-paper-digest-for-wikillm-without-LLM`, `WikiLLM paper
 digest`, `PDF to Markdown without LLM`, `연구논문 PDF Markdown`, `LLM 없는 논문
 변환`, `로컬 논문 파서`, `MCP 논문 도구`, `Firecrawl PDF`, `Joonan WikiLLM`,
 `학술논문 지식베이스`, `근거 기반 Markdown`, `오프라인 논문 OCR`

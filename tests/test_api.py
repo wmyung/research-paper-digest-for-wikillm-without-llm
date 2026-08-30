@@ -12,7 +12,7 @@ def test_local_web_app_is_self_contained_and_private():
     response = TestClient(app).get("/")
     assert response.status_code == 200
     assert "WikiLLM Paper Digest" in response.text
-    assert "research-paper-digest-for-wikillm-without-LLM" in response.text
+    assert "wikillm-digest-noLLM" in response.text
     assert "https://" not in response.text
     assert response.headers["cache-control"] == "no-store"
     assert "default-src 'self'" in response.headers["content-security-policy"]
