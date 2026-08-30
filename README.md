@@ -24,6 +24,19 @@ distribution.
 The repository contains no research papers, paper-derived Markdown, patient
 data, personal examples, credentials, or user-specific fixtures.
 
+## Optional validated recovery cascade
+
+The deterministic compiler remains model-free. For residual failures, the
+repository also includes the portable
+[`validated-cascade-workflow`](skills/validated-cascade-workflow/SKILL.md)
+skill. It preserves valid program output, tries deterministic repair first,
+uses a configured language model only for eligible residual cases, and requires
+the same fail-closed validation plus commit readback. The skill is
+model-neutral and artifact-neutral; paper-specific rules belong in adapters.
+
+Glossary QA rejects numbered placeholders such as `Term 1`. A syntactically
+long list of extracted prose is not accepted as a semantic glossary.
+
 ---
 
 ## Why This Is Needed: Stop Paying an LLM for Every Paper

@@ -289,9 +289,7 @@ class UniversalProfile:
         candidates = build_candidates(bundle)
         self.candidates = candidates
         scale = 1.0 + self.repair_pass * 0.18
-        active = tuple(
-            target for target in ORDER if target == "summary" or target in profile.applicable_targets
-        )
+        active = tuple(target for target in ORDER if target == "summary" or target in profile.applicable_targets)
         selected: dict[str, list[Candidate]] = {}
         taken: list[Candidate] = []
         for target in ORDER:

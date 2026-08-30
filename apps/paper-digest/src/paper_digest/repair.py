@@ -283,9 +283,7 @@ def fill_missing_targets(bundle, config, profile, selection, qa) -> Selection | 
     floor; the normal Stage-2 regression guard rejects any harmful move.
     """
     missing = {
-        match.group(1).casefold()
-        for error in qa.get("errors", [])
-        if (match := MISSING_TARGET_RE.search(error))
+        match.group(1).casefold() for error in qa.get("errors", []) if (match := MISSING_TARGET_RE.search(error))
     }
     targets = [target for target in ORDER if target in missing and target in REFILLABLE]
     if not targets or not profile.candidates:
@@ -526,7 +524,9 @@ class RepairOperator:
 # Removals run before additions: a leaked or repeated unit should not be
 # counted as section content that a refill then decides is sufficient.
 OPERATORS: tuple[RepairOperator, ...] = (
-    RepairOperator("apply_external_repair_plan", "validated grounded candidate assignments", apply_external_repair_plan),
+    RepairOperator(
+        "apply_external_repair_plan", "validated grounded candidate assignments", apply_external_repair_plan
+    ),
     RepairOperator("drop_leaked_units", "extraction and checklist artifacts", drop_leaked_units),
     RepairOperator("drop_repeated_units", "cross-section duplication", drop_repeated_units),
     RepairOperator("drop_ungrounded_units", "verbatim grounding", drop_ungrounded_units),

@@ -102,7 +102,9 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
             try:
                 extraction = extract_jats(xml_path, canonical_extraction.page_texts, canonical.name)
                 jats_sections = segment_sections(extraction.blocks, canonical.name)
-                section_count = len(SCIENTIFIC_SECTIONS & {name for name, value in jats_sections.items() if value.paragraphs})
+                section_count = len(
+                    SCIENTIFIC_SECTIONS & {name for name, value in jats_sections.items() if value.paragraphs}
+                )
                 diagnostic.update(
                     {
                         "aligned_sentences": extraction.aligned_sentences,
@@ -143,10 +145,7 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
         # not proof that the aligned subset will compile a better digest. JATS
         # is therefore a recovery fallback for genuinely short PDF prose only.
         selected = (
-            aligned_enough
-            and content_sufficient
-            and int(diagnostic["scientific_sections"]) >= 2
-            and source_needs_help
+            aligned_enough and content_sufficient and int(diagnostic["scientific_sections"]) >= 2 and source_needs_help
         )
         diagnostic["selected"] = selected
         diagnostic["pdf_words"] = pdf_words

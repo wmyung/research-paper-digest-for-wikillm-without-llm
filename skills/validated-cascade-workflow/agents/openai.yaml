@@ -1,0 +1,6 @@
+interface:
+  display_name: "Validated Cascade Workflow"
+  short_description: "Program-first repair with guarded model fallback"
+  default_prompt: "Use $validated-cascade-workflow to design a fail-closed program, repair, and language-model recovery cascade."
+policy:
+  allow_implicit_invocation: true

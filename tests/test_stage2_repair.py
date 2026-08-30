@@ -332,9 +332,7 @@ def test_external_luna_plan_rejects_a_different_pdf_hash(state, tmp_path):
             {
                 "schema_version": "luna_repair_plan_v1",
                 "identity": {"doi": bundle.metadata.doi, "pdf_sha256": "0" * 64},
-                "assignments": [
-                    {"candidate_id": f"c{candidate.order:05d}", "target": "information", "mode": "strict"}
-                ],
+                "assignments": [{"candidate_id": f"c{candidate.order:05d}", "target": "information", "mode": "strict"}],
             }
         ),
         encoding="utf-8",

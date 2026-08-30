@@ -82,6 +82,7 @@ TABLE_LEAK_RE = re.compile(
     r"^(?:Specify|Describe|Present|Provide|Report|List|Identify|Indicate|State)\b\s+[a-z]|"
     r"\b\d+[a-z]?\s+(?:Specify|Describe|Present|Provide|Report|List)\b",
 )
+GLOSSARY_PLACEHOLDER_LABEL_RE = re.compile(r"(?im)^[-*+]\s+(?:\*\*)?term\s+\d+(?:\*\*)?\s*(?::|[-—])")
 
 
 @dataclass(slots=True)
@@ -398,8 +399,15 @@ def check_section_density(context: QAContext) -> CheckResult:
         )
 
     glossary_entries = re.findall(r"(?m)^[-*+]\s+", glossary)
+    glossary_placeholders = GLOSSARY_PLACEHOLDER_LABEL_RE.findall(glossary)
     result.measurements["glossary_entries"] = len(glossary_entries)
+    result.measurements["glossary_placeholder_labels"] = len(glossary_placeholders)
     result.measurements["glossary_source_exhausted"] = glossary_source_exhausted
+    if glossary_placeholders:
+        result.errors.append(
+            "Glossary contains numbered placeholder labels such as 'Term 1'; "
+            "use source-grounded semantic terms or declare source exhaustion."
+        )
     if len(glossary_entries) < context.config.min_glossary_entries:
         if glossary_source_exhausted:
             result.warnings.append(

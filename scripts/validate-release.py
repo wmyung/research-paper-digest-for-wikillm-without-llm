@@ -34,6 +34,7 @@ def main() -> int:
         root / "apps/paper-digest/pyproject.toml",
         root / "apps/paper-digest/requirements.lock",
         root / "apps/paper-digest/Dockerfile",
+        root / "skills/validated-cascade-workflow/SKILL.md",
     ]
     missing = [str(path.relative_to(root)) for path in required if not path.is_file()]
     commands = [
@@ -69,7 +70,7 @@ def main() -> int:
     success = not missing and not private_artifacts and all(item["returncode"] == 0 for item in command_results)
     report = {
         "success": success,
-        "version": "2.3.0",
+        "version": "2.4.0",
         "missing": missing,
         "commands": command_results,
         "private_artifacts": private_artifacts,

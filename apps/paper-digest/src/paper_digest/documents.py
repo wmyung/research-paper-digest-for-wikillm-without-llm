@@ -635,9 +635,17 @@ def _count(patterns: tuple[str, ...], text: str) -> int:
 
 
 ARTICLE_TYPE_PRIORS: tuple[tuple[re.Pattern[str], str, float], ...] = (
-    (re.compile(r"\b(?:correspondence|letter|author(?:s)? reply|response)\b", re.I), "letter_response_correspondence", 9.0),
+    (
+        re.compile(r"\b(?:correspondence|letter|author(?:s)? reply|response)\b", re.I),
+        "letter_response_correspondence",
+        9.0,
+    ),
     (re.compile(r"\b(?:editorial|commentary|perspective|viewpoint)\b", re.I), "editorial_commentary", 9.0),
-    (re.compile(r"\b(?:systematic review|meta[- ]analysis|scoping review)\b", re.I), "systematic_review_meta_analysis", 10.0),
+    (
+        re.compile(r"\b(?:systematic review|meta[- ]analysis|scoping review)\b", re.I),
+        "systematic_review_meta_analysis",
+        10.0,
+    ),
     (re.compile(r"\b(?:review article|narrative review|review)\b", re.I), "narrative_review", 5.0),
     (re.compile(r"\b(?:study protocol|protocol)\b", re.I), "study_protocol", 9.0),
     (re.compile(r"\bcase (?:report|series)\b", re.I), "case_report", 9.0),

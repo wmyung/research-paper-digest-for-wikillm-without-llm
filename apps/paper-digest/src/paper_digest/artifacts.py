@@ -83,9 +83,7 @@ def _luna_repair_packet(result: CompiledDigest) -> dict[str, object] | None:
     for candidate in candidates:
         candidate_id = f"c{candidate.order:05d}"
         scores = {
-            target: round(score, 4)
-            for target in ORDER
-            if (score := score_for(candidate, target, relaxed=False)) > 0.0
+            target: round(score, 4) for target in ORDER if (score := score_for(candidate, target, relaxed=False)) > 0.0
         }
         relaxed_scores = {
             target: round(score, 4)

@@ -145,3 +145,15 @@ def test_untrusted_glossary_exhaustion_text_does_not_bypass_the_gate(tmp_path):
 
     assert qa["checks"]["glossary_source_exhausted"] is False
     assert any("Glossary must contain" in error for error in qa["errors"])
+
+
+def test_numbered_glossary_placeholder_is_a_hard_failure(tmp_path):
+    content = _content()
+    content.glossary = "\n".join(
+        f"- **Term {index}:** This is extracted prose rather than a semantic glossary term." for index in range(1, 7)
+    )
+    qa = _evaluate(tmp_path, content=content)
+
+    assert qa["source_ready"] is False
+    assert qa["checks"]["glossary_placeholder_labels"] == 6
+    assert any("numbered placeholder labels" in error for error in qa["errors"])

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.4.0
+
+- Glossary QA now rejects numbered placeholder labels such as `Term 1` as a
+  hard failure. A list count can no longer make extracted prose look like a
+  semantic glossary.
+- The repository now ships the model-neutral
+  `validated-cascade-workflow` skill. It generalizes program-first pass-through,
+  deterministic repair, optional language-model fallback, fail-closed
+  validation, serialized commit, and verified readback to other artifact
+  domains.
+- Release metadata is aligned on 2.4.0 and release validation requires the
+  portable skill entrypoint.
+
 ## 2.3.0
 
 This release targets the production failures that remained after 2.2.1 while
