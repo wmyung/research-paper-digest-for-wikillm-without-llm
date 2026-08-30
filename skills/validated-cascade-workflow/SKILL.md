@@ -17,12 +17,13 @@ Build a cost-aware recovery cascade around an existing program. The invariant is
 ## Run the cascade
 
 1. Run the existing program once. Preserve a validated result unchanged.
-2. Classify a failure before spending model effort. Exclude or hold wrong, incomplete, corrupted, inaccessible, or out-of-scope sources.
-3. Apply deterministic repairs first: schema normalization, field completion from trusted inputs, evidence-linked reassignment, deduplication, index regeneration, and validator-directed structural repair.
-4. Revalidate after each accepted repair. Stop a repair loop that does not reduce hard failures or improve the configured monotone objective.
-5. Permit language-model fallback only for eligible residual failures. Give it allowlisted inputs, exact failed gates, an output schema, and a bounded objective. A configured model is optional; never assume a provider or model name.
-6. Parse model output as an untrusted proposal. Rebuild evidence and provenance deterministically, then run the same validator used for program output.
-7. Commit only a validated artifact. Serialize external commits, use an idempotency key derived from identity and artifact hashes, and verify the stored result by readback.
+2. Batch-read the destination before spending model effort. If the same identity/version already has a valid committed artifact or a protected in-flight commit, record `EXISTING_DESTINATION_PRESERVED`; do not regenerate, replace, or supersede it. Fail closed on identity matches with conflicting source hashes.
+3. Classify a failure before spending model effort. Exclude or hold wrong, incomplete, corrupted, inaccessible, or out-of-scope sources.
+4. Apply deterministic repairs first: schema normalization, field completion from trusted inputs, evidence-linked reassignment, deduplication, index regeneration, and validator-directed structural repair.
+5. Revalidate after each accepted repair. Stop a repair loop that does not reduce hard failures or improve the configured monotone objective.
+6. Permit language-model fallback only for eligible residual failures. Give it allowlisted inputs, exact failed gates, an output schema, and a bounded objective. A configured model is optional; never assume a provider or model name.
+7. Parse model output as an untrusted proposal. Rebuild evidence and provenance deterministically, then run the same validator used for program output.
+8. Commit only a validated artifact. Serialize external commits, use an idempotency key derived from identity and artifact hashes, repeat the destination-preservation gate inside the commit transaction, and verify the stored result by readback.
 
 ## Parallel operation
 
@@ -34,4 +35,4 @@ Score alone never authorizes commit. Block on identity or hash mismatch, unsuppo
 
 ## Finish
 
-Report program passes, deterministic recoveries, model recoveries, exclusions, holds, validated artifacts, verified commits, retries, duplicate suppressions, elapsed time, and per-stage cost. Distinguish local validation from verified destination state.
+Report program passes, deterministic recoveries, model recoveries, existing-destination preservations, exclusions, holds, validated artifacts, verified commits, retries, duplicate suppressions, elapsed time, and per-stage cost. Distinguish local validation from verified destination state.
