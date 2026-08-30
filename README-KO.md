@@ -52,6 +52,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e "apps/paper-digest[dev]"
 .venv/bin/paper-digest paper.pdf supplement.pdf tables.xlsx -o output
 .venv/bin/paper-digest --offline paper.pdf -o output
+.venv/bin/paper-digest paper.pdf -o output --source-ready-threshold 0.8 --stage2-max-rounds 3
 ```
 
 실행할 때마다 파일 4개가 생성됩니다.
@@ -101,6 +102,11 @@ MCP 도구 `digest_research_paper`에 절대 입력 경로 목록과 출력 디�
 전달합니다. DOI 메타데이터 보완이 기본이고 `offline: true`로 완전 오프라인
 실행할 수 있습니다. 결과 경로·상태·점수·QA 오류만 반환합니다. 에이전트도
 `SOURCE_READY`만 인증 결과로 취급해야 합니다.
+
+CLI, HTTP 옵션, MCP에서 `source_ready_threshold`, `enable_stage2`,
+`stage2_min_score`, `stage2_max_rounds`를 같은 의미로 설정할 수 있습니다.
+임계값을 낮춰도 hard error는 숨겨지지 않으며, 오류가 하나라도 있으면 계속
+`NOT_SOURCE_READY`입니다.
 
 ## 무엇이 "LLM 없이" 가능한가
 

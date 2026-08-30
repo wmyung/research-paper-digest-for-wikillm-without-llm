@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.2.1
+
+Validated against a frozen, stratified set of 50 production papers: 40 prior
+`NOT_SOURCE_READY` cases and 10 registered controls. The controls did not
+regress. This patch keeps every evidence and certification gate intact while
+fixing four deterministic failure-handling gaps.
+
+- A generated glossary exhaustion note now proves that a short glossary is a
+  source limitation, so QA warns instead of asking the compiler to invent a
+  fifth definition. The exact compiler-authored note is required.
+- Crossref title, author, venue, volume, issue, and page strings are HTML-entity
+  decoded, including double-escaped publisher values.
+- Stage 1 ranks failing candidates by fewer hard errors, then unclamped raw
+  score, fewer warnings, and body coverage. The clamped published score is no
+  longer used to distinguish failed candidates.
+- CLI, HTTP, and MCP now expose the same Stage-2 controls, including
+  `stage2_max_rounds`; invalid HTTP option combinations return 422 instead of
+  escaping as server errors.
+
 ## 2.2.0
 
 Stage 1 recompiles the whole digest with a larger evidence budget and never

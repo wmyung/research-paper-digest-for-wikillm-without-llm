@@ -64,6 +64,7 @@ async def digest(
         "enable_doi_metadata",
         "enable_stage2",
         "stage2_min_score",
+        "stage2_max_rounds",
     }
     unknown = sorted(set(raw_options) - allowed)
     if unknown:
@@ -86,8 +87,8 @@ async def digest(
             path = root / f"{index:02d}-{name}"
             path.write_bytes(data)
             paths.append(path)
-        config = DigestConfig(work_dir=root / "work", **raw_options)
         try:
+            config = DigestConfig(work_dir=root / "work", **raw_options)
             result = digest_files(paths, config)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc

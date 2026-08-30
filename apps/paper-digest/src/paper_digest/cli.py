@@ -24,6 +24,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--pdf-path", default=None, help="Repository path written to frontmatter.")
     parser.add_argument("--source-collection", default="publisher-pdf")
+    parser.add_argument(
+        "--source-ready-threshold",
+        type=float,
+        default=0.95,
+        help="Certification threshold in (0, 1]; default: 0.95.",
+    )
+    parser.add_argument("--disable-stage2", action="store_true", help="Disable diagnosis-driven Stage-2 repair.")
+    parser.add_argument("--stage2-min-score", type=float, default=0.70, help="Minimum raw score eligible for Stage 2.")
+    parser.add_argument("--stage2-max-rounds", type=int, default=3, help="Stage-2 repair rounds, from 1 to 6.")
     parser.add_argument("--offline", action="store_true", help="Disable DOI-registry metadata repair.")
     parser.add_argument(
         "--verify-pdf-path",
@@ -35,15 +44,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    config = DigestConfig(
-        profile=args.profile,
-        strict=not args.non_strict,
-        pdf_path=args.pdf_path,
-        source_collection=args.source_collection,
-        enable_doi_metadata=not args.offline,
-        verify_pdf_path=args.verify_pdf_path,
-    )
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        config = DigestConfig(
+            profile=args.profile,
+            strict=not args.non_strict,
+            pdf_path=args.pdf_path,
+            source_collection=args.source_collection,
+            source_ready_threshold=args.source_ready_threshold,
+            enable_doi_metadata=not args.offline,
+            verify_pdf_path=args.verify_pdf_path,
+            enable_stage2=not args.disable_stage2,
+            stage2_min_score=args.stage2_min_score,
+            stage2_max_rounds=args.stage2_max_rounds,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     result = digest_files(args.inputs, config)
     payload = result.to_dict(include_markdown=args.json_only)
     if args.json_only:

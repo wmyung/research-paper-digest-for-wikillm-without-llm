@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from .compiler import compile_markdown
 from .config import DigestConfig
@@ -138,6 +138,16 @@ class _Stage1State:
     content: ProfileContent
 
 
+def _stage1_candidate_rank(qa: dict[str, Any]) -> tuple[int, float, int, int]:
+    """Rank failing Stage-1 candidates without the published-score clamp."""
+    return (
+        -len(qa.get("errors", [])),
+        float(qa.get("raw_quality_score", qa.get("quality_score", 0.0))),
+        -len(qa.get("warnings", [])),
+        int(qa.get("checks", {}).get("body_words", 0)),
+    )
+
+
 def _stage2(
     best: CompiledDigest,
     state: _Stage1State,
@@ -234,14 +244,7 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
                 best = candidate
                 best_state = _Stage1State(profile, profile_scores, selection, content)
             else:
-                candidate_key = (qa["quality_score"], -len(qa["errors"]), qa["checks"].get("body_words", 0))
-                best_qa = best.qa
-                best_key = (
-                    best_qa["quality_score"],
-                    -len(best_qa["errors"]),
-                    best_qa["checks"].get("body_words", 0),
-                )
-                if candidate_key > best_key:
+                if _stage1_candidate_rank(qa) > _stage1_candidate_rank(best.qa):
                     best = candidate
                     best_state = _Stage1State(profile, profile_scores, selection, content)
         if best is None or best_state is None:

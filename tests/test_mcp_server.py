@@ -19,7 +19,13 @@ def test_mcp_tool_is_listed_and_writes_artifacts(monkeypatch, tmp_path):
         metadata=metadata,
         qa={"source_ready": True, "quality_score": 1.0, "errors": []},
     )
-    monkeypatch.setattr(module, "digest_files", lambda paths, config: compiled)
+    captured = {}
+
+    def fake_digest(paths, config):
+        captured["config"] = config
+        return compiled
+
+    monkeypatch.setattr(module, "digest_files", fake_digest)
     source = tmp_path / "synthetic.pdf"
     source.write_bytes(b"%PDF-1.4 synthetic test fixture")
     output = tmp_path / "output"
@@ -30,7 +36,13 @@ def test_mcp_tool_is_listed_and_writes_artifacts(monkeypatch, tmp_path):
             assert [tool.name for tool in tools.tools] == ["digest_research_paper"]
             answer = await client.call_tool(
                 "digest_research_paper",
-                {"input_paths": [str(source)], "output_dir": str(output)},
+                {
+                    "input_paths": [str(source)],
+                    "output_dir": str(output),
+                    "source_ready_threshold": 0.8,
+                    "stage2_min_score": 0.65,
+                    "stage2_max_rounds": 4,
+                },
             )
             assert answer.structured_content["status"] == "SOURCE_READY"
             assert answer.structured_content["llm_used"] is False
@@ -39,3 +51,6 @@ def test_mcp_tool_is_listed_and_writes_artifacts(monkeypatch, tmp_path):
     asyncio.run(exercise())
     assert (output / "synthetic.md").read_text() == compiled.markdown
     assert (output / "synthetic.qa.json").is_file()
+    assert captured["config"].source_ready_threshold == 0.8
+    assert captured["config"].stage2_min_score == 0.65
+    assert captured["config"].stage2_max_rounds == 4

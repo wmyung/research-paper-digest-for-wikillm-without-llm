@@ -344,7 +344,16 @@ def check_section_density(context: QAContext) -> CheckResult:
     # A glossary that already lists every term the source defines is complete
     # even when those definitions are short; padding it would mean inventing
     # glosses the paper never wrote.
-    glossary_entry_count = len(re.findall(r"(?m)^[-*+]\s+", sections.get("## 7. Glossary", "")))
+    glossary = sections.get("## 7. Glossary", "")
+    glossary_entry_count = len(re.findall(r"(?m)^[-*+]\s+", glossary))
+    authored_sentences = {sentence.casefold() for sentence in context.authored}
+    glossary_source_exhausted = any(
+        marker in glossary.casefold() and any(marker in sentence for sentence in authored_sentences)
+        for marker in (
+            "the source states no further defined terms.",
+            "the source states no defined terms or expanded acronyms.",
+        )
+    )
     for target, heading in SECTION_HEADINGS.items():
         floor = floors.get(target, 0)
         words = word_count(sections.get(heading, ""))
@@ -356,10 +365,10 @@ def check_section_density(context: QAContext) -> CheckResult:
         capacity = context.section_capacity.get(target)
         if target == "glossary":
             shortfalls[heading] = {"words": words, "floor": floor, "entries": glossary_entry_count}
-            if glossary_entry_count >= context.config.min_glossary_entries:
+            if glossary_entry_count >= context.config.min_glossary_entries or glossary_source_exhausted:
                 result.warnings.append(
                     f"{heading} has {words} words against a {floor}-word floor, but lists "
-                    f"{glossary_entry_count} entries: every term the source defines is already present."
+                    f"{glossary_entry_count} entries and records that the source defines no more terms."
                 )
             else:
                 result.errors.append(f"Section is underdeveloped: {heading} has {words} words; minimum is {floor}.")
@@ -388,13 +397,19 @@ def check_section_density(context: QAContext) -> CheckResult:
             f"{context.config.max_contribution_items} explicit items; found {len(items)}."
         )
 
-    glossary_entries = re.findall(r"(?m)^[-*+]\s+", sections.get("## 7. Glossary", ""))
+    glossary_entries = re.findall(r"(?m)^[-*+]\s+", glossary)
     result.measurements["glossary_entries"] = len(glossary_entries)
+    result.measurements["glossary_source_exhausted"] = glossary_source_exhausted
     if len(glossary_entries) < context.config.min_glossary_entries:
-        result.errors.append(
-            f"Glossary must contain at least {context.config.min_glossary_entries} entries; "
-            f"found {len(glossary_entries)}."
-        )
+        if glossary_source_exhausted:
+            result.warnings.append(
+                f"Glossary has {len(glossary_entries)} entries because the source defines no additional terms."
+            )
+        else:
+            result.errors.append(
+                f"Glossary must contain at least {context.config.min_glossary_entries} entries; "
+                f"found {len(glossary_entries)}."
+            )
 
     summary = sections.get("## One-line Summary", "").strip()
     summary_words = word_count(summary)

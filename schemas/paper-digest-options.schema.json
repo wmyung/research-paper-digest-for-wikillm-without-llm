@@ -21,6 +21,7 @@
     "source_ready_threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.95 },
     "enable_doi_metadata": { "type": "boolean", "default": true },
     "enable_stage2": { "type": "boolean", "default": true },
-    "stage2_min_score": { "type": "number", "minimum": 0, "exclusiveMaximum": 1, "default": 0.70 }
+    "stage2_min_score": { "type": "number", "minimum": 0, "exclusiveMaximum": 1, "default": 0.70 },
+    "stage2_max_rounds": { "type": "integer", "minimum": 1, "maximum": 6, "default": 3 }
   }
 }

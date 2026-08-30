@@ -18,9 +18,9 @@ def test_crossref_enrichment_sends_only_encoded_doi(monkeypatch):
     payload = {
         "message": {
             "DOI": "10.1000/synthetic.1",
-            "title": ["A synthetic registry record"],
-            "author": [{"given": "A.", "family": "Example"}],
-            "container-title": ["Synthetic Methods Journal"],
+            "title": ["A synthetic &amp; registry record"],
+            "author": [{"given": "A.&amp;", "family": "Example"}],
+            "container-title": ["Synthetic &amp;amp; Methods Journal"],
             "published-online": {"date-parts": [[2024, 2, 3]]},
             "volume": "12",
             "issue": "2",
@@ -41,8 +41,8 @@ def test_crossref_enrichment_sends_only_encoded_doi(monkeypatch):
         "url": "https://api.crossref.org/works/10.1000%2Fsynthetic.1",
         "timeout": 3.0,
     }
-    assert metadata.title == "A synthetic registry record"
-    assert metadata.authorship.authors == ["A. Example"]
-    assert metadata.journal == "Synthetic Methods Journal"
+    assert metadata.title == "A synthetic & registry record"
+    assert metadata.authorship.authors == ["A.& Example"]
+    assert metadata.journal == "Synthetic & Methods Journal"
     assert metadata.year == 2024
     assert metadata.metadata_sources == ["Crossref DOI registry"]

@@ -25,6 +25,10 @@ def digest_research_paper(
     output_dir: str,
     offline: bool = False,
     profile: str = "auto",
+    source_ready_threshold: float = 0.95,
+    enable_stage2: bool = True,
+    stage2_min_score: float = 0.70,
+    stage2_max_rounds: int = 3,
 ) -> dict[str, Any]:
     """Convert a local PDF and optional supplements to WikiLLM Markdown and QA JSON.
 
@@ -41,7 +45,14 @@ def digest_research_paper(
     destination = Path(output_dir).expanduser().resolve()
     result = digest_files(
         inputs,
-        DigestConfig(profile=profile, enable_doi_metadata=not offline),
+        DigestConfig(
+            profile=profile,
+            enable_doi_metadata=not offline,
+            source_ready_threshold=source_ready_threshold,
+            enable_stage2=enable_stage2,
+            stage2_min_score=stage2_min_score,
+            stage2_max_rounds=stage2_max_rounds,
+        ),
     )
     paths = write_artifacts(result, destination)
     return {

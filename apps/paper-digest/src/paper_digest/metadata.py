@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
+from html import unescape
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -69,6 +70,17 @@ LICENSE_PATTERNS = [
 def _excerpt(text: str, limit: int = 220) -> str:
     value = normalize_prose(text)
     return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
+
+
+def _registry_text(value: object) -> str:
+    """Normalize text returned by Crossref, including escaped publisher names."""
+    text = normalize_prose(str(value))
+    for _ in range(2):
+        decoded = normalize_prose(unescape(text))
+        if decoded == text:
+            break
+        text = decoded
+    return text
 
 
 def _record(metadata: PublicationMetadata, field: str, value: str, source: str, page: int | None, excerpt: str) -> None:
@@ -480,7 +492,7 @@ def enrich_from_doi_registry(metadata: PublicationMetadata, timeout: float = 8.0
 
     titles = message.get("title") or []
     if titles:
-        registry_title = normalize_prose(str(titles[0]))
+        registry_title = _registry_text(titles[0])
         if registry_title:
             metadata.title = registry_title
             _record(metadata, "title", registry_title, "Crossref DOI registry", None, registry_title)
@@ -488,7 +500,7 @@ def enrich_from_doi_registry(metadata: PublicationMetadata, timeout: float = 8.0
     for item in message.get("author") or []:
         if not isinstance(item, dict):
             continue
-        name = normalize_prose(" ".join(str(item.get(key, "")) for key in ("given", "family")).strip())
+        name = _registry_text(" ".join(str(item.get(key, "")) for key in ("given", "family")).strip())
         if name:
             authors.append(name)
     if authors:
@@ -499,12 +511,12 @@ def enrich_from_doi_registry(metadata: PublicationMetadata, timeout: float = 8.0
 
     containers = message.get("container-title") or []
     if containers:
-        metadata.journal = normalize_prose(str(containers[0]))
+        metadata.journal = _registry_text(containers[0])
         _record(metadata, "journal", metadata.journal, "Crossref DOI registry", None, metadata.journal)
-    metadata.volume = normalize_prose(str(message.get("volume") or metadata.volume))
-    metadata.issue = normalize_prose(str(message.get("issue") or metadata.issue))
-    metadata.pages_or_article = normalize_prose(
-        str(message.get("page") or message.get("article-number") or metadata.pages_or_article)
+    metadata.volume = _registry_text(message.get("volume") or metadata.volume)
+    metadata.issue = _registry_text(message.get("issue") or metadata.issue)
+    metadata.pages_or_article = _registry_text(
+        message.get("page") or message.get("article-number") or metadata.pages_or_article
     )
     online, online_year = _crossref_date(message, "published-online", "published")
     issue_date, issue_year = _crossref_date(message, "published-print", "issued")
@@ -515,7 +527,7 @@ def enrich_from_doi_registry(metadata: PublicationMetadata, timeout: float = 8.0
     elif issue_date and not metadata.publication_date:
         metadata.publication_date, metadata.publication_date_label = issue_date, "issue"
     metadata.year = online_year or issue_year or metadata.year
-    registry_type = str(message.get("type") or "").replace("-", " ").strip()
+    registry_type = _registry_text(message.get("type") or "").replace("-", " ").strip()
     if registry_type:
         for pattern, canonical in ARTICLE_TYPE_NORMALISATION:
             if pattern.search(registry_type):

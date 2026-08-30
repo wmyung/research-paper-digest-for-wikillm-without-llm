@@ -116,3 +116,32 @@ def test_check_registry_reports_a_status_for_every_check(tmp_path):
     statuses = qa["checks"]["check_status"]
     assert {"schema", "metadata", "authors", "density", "grounding", "coverage", "evidence"} <= set(statuses)
     assert set(statuses.values()) <= {"pass", "fail"}
+
+
+def test_glossary_source_exhaustion_is_a_warning_not_an_invention_prompt(tmp_path):
+    note = "The source states no further defined terms."
+    content = _content()
+    content.glossary = "\n".join(
+        [
+            "- **RCT** — randomized controlled trial.",
+            "- **CI** — confidence interval.",
+            "- **SD** — standard deviation.",
+            "- **ITT** — intention to treat.",
+            note,
+        ]
+    )
+    qa = _evaluate(tmp_path, content=content, authored=[note])
+
+    assert qa["checks"]["glossary_source_exhausted"] is True
+    assert not [error for error in qa["errors"] if "Glossary" in error]
+    assert not [error for error in qa["errors"] if "## 7. Glossary" in error]
+    assert any("source defines no additional terms" in warning for warning in qa["warnings"])
+
+
+def test_untrusted_glossary_exhaustion_text_does_not_bypass_the_gate(tmp_path):
+    content = _content()
+    content.glossary = "- **RCT** — randomized controlled trial.\nThe source states no further defined terms."
+    qa = _evaluate(tmp_path, content=content)
+
+    assert qa["checks"]["glossary_source_exhausted"] is False
+    assert any("Glossary must contain" in error for error in qa["errors"])

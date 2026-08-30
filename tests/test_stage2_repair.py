@@ -9,7 +9,7 @@ from paper_digest import repair as R
 from paper_digest.compiler import compile_markdown
 from paper_digest.config import DigestConfig
 from paper_digest.evidence import metadata_ledger
-from paper_digest.pipeline import build_bundle, digest_files
+from paper_digest.pipeline import _stage1_candidate_rank, build_bundle, digest_files
 from paper_digest.profiles.classifier import choose_profile
 from paper_digest.qa import evaluate_digest
 from synthetic import build_pdf
@@ -42,6 +42,42 @@ def _digest(paper, tmp_path, name: str, **options):
 # --------------------------------------------------------------------------- #
 # The score plateau
 # --------------------------------------------------------------------------- #
+
+
+def test_stage1_rank_uses_raw_score_after_hard_error_count():
+    lower_raw = {
+        "quality_score": 0.79,
+        "raw_quality_score": 0.72,
+        "errors": ["same gate"],
+        "warnings": [],
+        "checks": {"body_words": 2400},
+    }
+    higher_raw = {
+        "quality_score": 0.79,
+        "raw_quality_score": 0.91,
+        "errors": ["same gate"],
+        "warnings": ["soft warning"],
+        "checks": {"body_words": 1800},
+    }
+    assert _stage1_candidate_rank(higher_raw) > _stage1_candidate_rank(lower_raw)
+
+
+def test_stage1_rank_never_trades_an_extra_hard_error_for_score():
+    fewer_errors = {
+        "quality_score": 0.79,
+        "raw_quality_score": 0.71,
+        "errors": ["one"],
+        "warnings": [],
+        "checks": {"body_words": 1200},
+    }
+    more_errors = {
+        "quality_score": 0.79,
+        "raw_quality_score": 0.99,
+        "errors": ["one", "two"],
+        "warnings": [],
+        "checks": {"body_words": 4000},
+    }
+    assert _stage1_candidate_rank(fewer_errors) > _stage1_candidate_rank(more_errors)
 
 
 def test_the_published_score_is_clamped_but_the_raw_score_is_reported(paper, tmp_path):

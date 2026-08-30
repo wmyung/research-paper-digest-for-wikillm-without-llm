@@ -84,6 +84,7 @@ python3 -m venv .venv
 .venv/bin/paper-digest paper.pdf -o output
 .venv/bin/paper-digest paper.pdf supplement.pdf tables.xlsx -o output
 .venv/bin/paper-digest --offline paper.pdf -o output
+.venv/bin/paper-digest paper.pdf -o output --source-ready-threshold 0.8 --stage2-max-rounds 3
 ```
 
 Every run writes four files:
@@ -144,7 +145,11 @@ digest_research_paper(
   input_paths: ["/absolute/path/paper.pdf", ...],
   output_dir: "/absolute/path/output",
   offline: false,
-  profile: "auto"
+  profile: "auto",
+  source_ready_threshold: 0.95,
+  enable_stage2: true,
+  stage2_min_score: 0.70,
+  stage2_max_rounds: 3
 )
 ```
 
@@ -190,6 +195,10 @@ generative LLM and performs no network inference.
 
 The compiler does not claim success because it produced text. `SOURCE_READY`
 requires every hard gate and a quality score of at least `0.95`.
+
+The threshold and Stage-2 window can be configured consistently through CLI,
+HTTP options, or MCP. Lowering the threshold never suppresses a hard error;
+any error still forces `NOT_SOURCE_READY`.
 
 - exact 11-key YAML frontmatter and eight required H2 sections;
 - per-section word floors, with a shortfall attributed to the source when the

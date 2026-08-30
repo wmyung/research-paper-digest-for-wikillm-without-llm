@@ -118,7 +118,7 @@ export async function paperDigestController(
       body: form,
       signal: controller.signal,
       headers: {
-        "X-Firecrawl-Integration": "wikillm-paper-digest-v2.2.0",
+        "X-Firecrawl-Integration": "wikillm-paper-digest-v2.2.1",
       },
     });
     const body = await upstream.text();
