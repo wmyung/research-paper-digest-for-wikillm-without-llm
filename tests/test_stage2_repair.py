@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -272,6 +273,81 @@ def test_drop_ungrounded_units_removes_prose_absent_from_the_source(state):
     repaired = R.drop_ungrounded_units(bundle, config, profile, amended, qa)
     assert repaired is not None
     assert all(invented != item.text for item in repaired["results"])
+
+
+def test_fill_missing_targets_retries_the_exact_empty_section(state):
+    bundle, config, profile, selection, qa = state
+    amended = {target: list(items) for target, items in selection.items()}
+    assert amended["information"]
+    amended["information"] = []
+    qa = {**qa, "errors": ["No grounded evidence unit was selected for information."]}
+
+    repaired = R.fill_missing_targets(bundle, config, profile, amended, qa)
+
+    assert repaired is not None
+    assert repaired["information"]
+
+
+def test_external_luna_plan_can_only_assign_a_matching_grounded_candidate(state, tmp_path):
+    bundle, config, profile, selection, qa = state
+    candidate = selection["information"][0]
+    amended = {target: [item for item in items if item is not candidate] for target, items in selection.items()}
+    canonical = next(item for item in bundle.files if item.role == "canonical-paper")
+    plan = tmp_path / "luna-plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "schema_version": "luna_repair_plan_v1",
+                "identity": {"doi": bundle.metadata.doi, "pdf_sha256": canonical.sha256},
+                "assignments": [
+                    {
+                        "candidate_id": f"c{candidate.order:05d}",
+                        "target": "information",
+                        "mode": "strict",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    repaired = R.apply_external_repair_plan(
+        bundle,
+        replace(config, external_repair_plan=plan),
+        profile,
+        amended,
+        qa,
+    )
+
+    assert repaired is not None
+    assert candidate in repaired["information"]
+
+
+def test_external_luna_plan_rejects_a_different_pdf_hash(state, tmp_path):
+    bundle, config, profile, selection, qa = state
+    candidate = selection["information"][0]
+    plan = tmp_path / "wrong-plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "schema_version": "luna_repair_plan_v1",
+                "identity": {"doi": bundle.metadata.doi, "pdf_sha256": "0" * 64},
+                "assignments": [
+                    {"candidate_id": f"c{candidate.order:05d}", "target": "information", "mode": "strict"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        R.apply_external_repair_plan(
+            bundle,
+            replace(config, external_repair_plan=plan),
+            profile,
+            selection,
+            qa,
+        )
 
 
 def test_operators_decline_a_record_with_nothing_to_repair(state):

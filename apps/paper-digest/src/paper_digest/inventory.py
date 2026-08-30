@@ -12,7 +12,20 @@ from .config import DigestConfig
 from .models import InputFile
 from .parsers.archive import expand_archives
 
-SUPPORTED_SUFFIXES = {".pdf", ".xlsx", ".xlsm", ".docx", ".csv", ".tsv", ".md", ".txt", ".rst", ".json", ".zip"}
+SUPPORTED_SUFFIXES = {
+    ".pdf",
+    ".xml",
+    ".xlsx",
+    ".xlsm",
+    ".docx",
+    ".csv",
+    ".tsv",
+    ".md",
+    ".txt",
+    ".rst",
+    ".json",
+    ".zip",
+}
 
 
 def _hash(path: Path) -> str:

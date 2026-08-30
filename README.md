@@ -82,12 +82,13 @@ python3 -m venv .venv
 
 ```bash
 .venv/bin/paper-digest paper.pdf -o output
-.venv/bin/paper-digest paper.pdf supplement.pdf tables.xlsx -o output
+.venv/bin/paper-digest paper.pdf fulltext.xml supplement.pdf tables.xlsx -o output
 .venv/bin/paper-digest --offline paper.pdf -o output
 .venv/bin/paper-digest paper.pdf -o output --source-ready-threshold 0.8 --stage2-max-rounds 3
 ```
 
-Every run writes four files:
+Every run writes four audit files; a failed run writes one additional repair
+packet:
 
 - `*.md` — the grounded WikiLLM source Markdown candidate;
 - `*.qa.json` — the score, hard-gate checks, retrieval regressions, and exact
@@ -96,6 +97,14 @@ Every run writes four files:
   on which page, and the verbatim excerpt it was read from;
 - `*.evidence-coverage.json` — which evidence slots of the resolved document
   profile the source actually covers, and which it does not.
+- `*.luna-repair-input.json` (`NOT_SOURCE_READY` only) — JSON-first failure
+  diagnosis, page-addressable source sections and scored grounded candidate IDs.
+
+An optional small-model review remains outside this package. Give that model the
+repair-input JSON instead of the full PDF, have it return only a
+`luna_repair_plan_v1` file, then rerun with `--repair-plan plan.json`. The
+compiler accepts no supplied prose: it validates the DOI and PDF SHA-256 and can
+only assign candidates that it extracted and grounded itself.
 
 See [Evidence Ledgers](docs/EVIDENCE_LEDGERS.md) for how to read the last two.
 

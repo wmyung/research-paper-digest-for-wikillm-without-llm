@@ -119,9 +119,9 @@ The default score threshold is 0.95. Two scores are reported:
 ## Repair stages
 
 **Stage 1** runs up to four passes that increase evidence budgets and rerun the
-complete gate set. It never reads the QA report, and it fills targets in a fixed
-order where the first target to claim a sentence keeps it, so a record that
-fails structurally does not move across its four passes.
+complete gate set. It never reads the QA report. Risk-specific targets reserve
+their cue-matching evidence before broader results and methods selection; an
+explicitly empty target is retried later by diagnosis-driven Stage 2.
 
 **Stage 2** runs when Stage 1 leaves a record failing and `raw_quality_score` is
 at or above `stage2_min_score` (0.70 by default). It reads the failing gates and
@@ -133,9 +133,11 @@ span, so a repair cannot break the grounding gate.
 
 | Operator | Gate it repairs |
 | --- | --- |
+| `apply_external_repair_plan` | PDF-hash-bound grounded candidate assignments from an explicit repair JSON |
 | `drop_leaked_units` | soft-hyphen residue, checklist and table rows, process markers |
 | `drop_repeated_units` | the same sentence claimed by two sections |
 | `drop_ungrounded_units` | prose the grounding audit cannot match to the source |
+| `fill_missing_targets` | an applicable target with no selected grounded evidence unit |
 | `refill_sections` | a section under its floor while the source still has unclaimed material |
 | `reallocate_units` | a section under its floor while another sits above its own with a sentence that scores for both |
 | `fix_contribution_items` | the Key Contributions item band |

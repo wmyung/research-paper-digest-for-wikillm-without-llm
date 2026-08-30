@@ -63,10 +63,16 @@ class DigestConfig:
     enable_stage2: bool = True
     stage2_min_score: float = 0.70
     stage2_max_rounds: int = 3
+    # Optional, human/agent-authored candidate assignments. The compiler never
+    # calls a model; it accepts only IDs from its own grounded candidate JSON.
+    external_repair_plan: Path | None = None
     enable_ocr: bool = True
     ocr_language: str = "eng"
     enable_doi_metadata: bool = True
     doi_metadata_timeout_seconds: float = 8.0
+    enable_structured_xml: bool = True
+    jats_min_aligned_sentences: int = 12
+    jats_min_alignment_ratio: float = 0.60
     keyword_limit: int = 12
     field_limit: int = 6
     max_archive_members: int = 200
@@ -116,3 +122,7 @@ class DigestConfig:
             raise ValueError("stage2_max_rounds must be between 1 and 6.")
         if not 0.5 <= self.doi_metadata_timeout_seconds <= 30:
             raise ValueError("doi_metadata_timeout_seconds must be between 0.5 and 30.")
+        if self.jats_min_aligned_sentences < 5:
+            raise ValueError("jats_min_aligned_sentences must be at least 5.")
+        if not 0.5 <= self.jats_min_alignment_ratio <= 1.0:
+            raise ValueError("jats_min_alignment_ratio must be in [0.5, 1.0].")

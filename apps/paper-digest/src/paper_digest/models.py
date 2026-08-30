@@ -137,6 +137,7 @@ class ParsedBundle:
     table_caption_count: int = 0
     grounding_text: str = ""
     labelled_fields: dict[str, str] = field(default_factory=dict)
+    structured_source: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

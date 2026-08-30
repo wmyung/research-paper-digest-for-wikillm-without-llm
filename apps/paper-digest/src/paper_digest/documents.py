@@ -634,12 +634,40 @@ def _count(patterns: tuple[str, ...], text: str) -> int:
     return sum(1 for pattern in patterns if re.search(pattern, text, re.I))
 
 
+ARTICLE_TYPE_PRIORS: tuple[tuple[re.Pattern[str], str, float], ...] = (
+    (re.compile(r"\b(?:correspondence|letter|author(?:s)? reply|response)\b", re.I), "letter_response_correspondence", 9.0),
+    (re.compile(r"\b(?:editorial|commentary|perspective|viewpoint)\b", re.I), "editorial_commentary", 9.0),
+    (re.compile(r"\b(?:systematic review|meta[- ]analysis|scoping review)\b", re.I), "systematic_review_meta_analysis", 10.0),
+    (re.compile(r"\b(?:review article|narrative review|review)\b", re.I), "narrative_review", 5.0),
+    (re.compile(r"\b(?:study protocol|protocol)\b", re.I), "study_protocol", 9.0),
+    (re.compile(r"\bcase (?:report|series)\b", re.I), "case_report", 9.0),
+    (re.compile(r"\b(?:guideline|consensus|position statement|recommendation)\b", re.I), "guideline_consensus", 9.0),
+    (re.compile(r"\b(?:methods? article|software|tool|resource)\b", re.I), "methods_tool", 7.0),
+    (re.compile(r"\b(?:research article|original article|clinical trial)\b", re.I), "empirical_research", 6.0),
+    (re.compile(r"\b(?:correction|erratum|retraction|expression of concern)\b", re.I), "excluded_non_paper", 12.0),
+)
+
+
 def classify_document(
-    title: str, abstract: str, body: str, article_type: str
+    title: str,
+    abstract: str,
+    body: str,
+    article_type: str,
+    *,
+    section_names: set[str] | None = None,
+    page_count: int | None = None,
 ) -> tuple[DocumentProfile, list[tuple[str, float]]]:
-    """Pick a document profile from weighted lexical evidence."""
+    """Pick a document profile from lexical, metadata and structural evidence.
+
+    Publisher article-type labels and real section topology are treated as
+    priors, not absolute overrides. This corrects short correspondence and
+    reviews before empirical-only coverage gates are applied while still
+    allowing strong content evidence to win a contradictory label.
+    """
     head = f"{title}\n{article_type}\n{abstract}"
     corpus = body[:120000]
+    section_names = section_names or set()
+    has_methods_results = {"Methods", "Results"} <= section_names
     scores: list[tuple[float, int, DocumentProfile]] = []
     for order, profile in enumerate(PROFILES):
         score = 0.0
@@ -649,6 +677,23 @@ def classify_document(
         score += 2.0 * _count(profile.weak_signals, title)
         score += 1.0 * _count(profile.weak_signals, head)
         score += 0.4 * _count(profile.weak_signals, corpus)
+        for pattern, profile_key, weight in ARTICLE_TYPE_PRIORS:
+            if profile.key == profile_key and pattern.search(article_type or ""):
+                score += weight
+        if has_methods_results and profile.key == "empirical_research":
+            score += 4.0
+        if "Methods" in section_names and profile.key in {
+            "systematic_review_meta_analysis",
+            "methods_tool",
+            "study_protocol",
+            "guideline_consensus",
+        }:
+            score += 1.0
+        short_non_imrad = bool(page_count and page_count <= 3 and not has_methods_results)
+        if short_non_imrad and profile.key in {"letter_response_correspondence", "editorial_commentary"}:
+            score += 1.5
+        if has_methods_results and profile.key in {"letter_response_correspondence", "editorial_commentary"}:
+            score -= 2.5
         scores.append((score, -order, profile))
     scores.sort(reverse=True)
     best = scores[0]

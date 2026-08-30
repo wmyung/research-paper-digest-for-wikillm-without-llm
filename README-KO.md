@@ -50,12 +50,15 @@ WikiLLM Paper Digest는 이 반복적인 수집 단계를 로컬의 결정론적
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e "apps/paper-digest[dev]"
-.venv/bin/paper-digest paper.pdf supplement.pdf tables.xlsx -o output
+.venv/bin/paper-digest paper.pdf fulltext.xml supplement.pdf tables.xlsx -o output
 .venv/bin/paper-digest --offline paper.pdf -o output
 .venv/bin/paper-digest paper.pdf -o output --source-ready-threshold 0.8 --stage2-max-rounds 3
 ```
 
-실행할 때마다 파일 4개가 생성됩니다.
+실행할 때마다 감사 파일 4개가 생성되며, `NOT_SOURCE_READY`이면 Luna 같은
+보조 모델이 PDF 전체 대신 읽을 수 있는 `*.luna-repair-input.json`도 함께
+생성됩니다. 보조 모델의 출력은 `luna_repair_plan_v1` 후보 ID 배정만
+허용되며, `--repair-plan`으로 다시 실행할 때 PDF SHA-256과 DOI를 검증합니다.
 
 - `*.md` — 근거가 추적되는 WikiLLM 소스 Markdown 후보
 - `*.qa.json` — 점수, hard gate 검사, 검색 회귀검사, 미달 사유

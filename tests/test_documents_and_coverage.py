@@ -81,6 +81,31 @@ def test_correction_notices_are_routed_out_of_the_research_profiles():
     assert profile.key == "excluded_non_paper"
 
 
+def test_publisher_article_type_routes_short_correspondence_before_empirical_gates():
+    profile, ranking = classify_document(
+        "Response to the report on deterministic extraction",
+        "We read the report and clarify how the proposed boundary should be interpreted.",
+        "The authors reply to a point raised in the original publication.",
+        "Correspondence",
+        section_names={"Introduction", "Discussion"},
+        page_count=2,
+    )
+    assert profile.key == "letter_response_correspondence"
+    assert ranking[0][0] == "letter_response_correspondence"
+
+
+def test_real_methods_and_results_sections_resist_a_weak_short_document_prior():
+    profile, _ = classify_document(
+        "A brief evaluation of deterministic extraction",
+        "We measured accuracy in 412 records and report the comparison.",
+        "Participants were analysed using regression. Accuracy increased to 94.1%.",
+        "Article",
+        section_names={"Methods", "Results"},
+        page_count=3,
+    )
+    assert profile.key == "empirical_research"
+
+
 def test_design_taxonomy_prefers_title_evidence():
     category, fields = classify_design(
         "A randomised controlled trial of screening", "Participants were randomised to two arms.", "", "Article"

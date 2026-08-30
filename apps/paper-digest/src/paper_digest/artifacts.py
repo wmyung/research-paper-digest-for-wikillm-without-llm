@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .models import CompiledDigest
+from .profiles.universal import ORDER
+from .selection import build_candidates, score_for
 
 IDENTITY_RE = re.compile(r"^(?:title|doi):\s*(.*)$", re.M)
 
@@ -18,14 +20,18 @@ class ArtifactPaths:
     qa: Path
     metadata_evidence: Path
     evidence_coverage: Path
+    luna_repair_input: Path | None = None
 
     def as_dict(self) -> dict[str, str]:
-        return {
+        output = {
             "markdown": str(self.markdown),
             "qa": str(self.qa),
             "metadata_evidence": str(self.metadata_evidence),
             "evidence_coverage": str(self.evidence_coverage),
         }
+        if self.luna_repair_input is not None:
+            output["luna_repair_input"] = str(self.luna_repair_input)
+        return output
 
     def __iter__(self):
         # Kept iterable so `markdown_path, qa_path = write_artifacts(...)` works.
@@ -65,6 +71,117 @@ def _free_stem(output_dir: Path, stem: str, markdown: str) -> str:
         candidate = f"{stem}-{suffix}"
 
 
+def _luna_repair_packet(result: CompiledDigest) -> dict[str, object] | None:
+    """Build a rich JSON-first handoff without asking Luna to reread the PDF."""
+    bundle = result.bundle
+    if bundle is None:
+        return None
+    candidates = build_candidates(bundle)
+    canonical = next((item for item in bundle.files if item.role == "canonical-paper"), None)
+    catalog: list[dict[str, object]] = []
+    section_index: dict[str, list[str]] = {}
+    for candidate in candidates:
+        candidate_id = f"c{candidate.order:05d}"
+        scores = {
+            target: round(score, 4)
+            for target in ORDER
+            if (score := score_for(candidate, target, relaxed=False)) > 0.0
+        }
+        relaxed_scores = {
+            target: round(score, 4)
+            for target in ORDER
+            if target != "summary"
+            and target not in scores
+            and (score := score_for(candidate, target, relaxed=True)) > 0.0
+        }
+        catalog.append(
+            {
+                "candidate_id": candidate_id,
+                "text": candidate.text,
+                "source_file": candidate.source_file,
+                "page_start": candidate.page_start,
+                "page_end": candidate.page_end,
+                "section": candidate.section,
+                "subsection": candidate.subsection,
+                "source_order": candidate.order,
+                "strict_target_scores": scores,
+                "relaxed_target_scores": relaxed_scores,
+            }
+        )
+        section_index.setdefault(candidate.section, []).append(candidate_id)
+
+    source_sections = {
+        name: [
+            {
+                "page_start": paragraph.page_start,
+                "page_end": paragraph.page_end,
+                "subsection": paragraph.subsection,
+                "text": paragraph.text,
+            }
+            for paragraph in section.paragraphs
+        ]
+        for name, section in bundle.sections.items()
+        if section.paragraphs and name != "References"
+    }
+    return {
+        "schema_version": "wikillm-luna-repair-input-v1",
+        "purpose": "diagnose deterministic extraction/selection failures and propose a bounded repair plan",
+        "status": result.status,
+        "identity": {
+            "title": bundle.metadata.title,
+            "doi": bundle.metadata.doi,
+            "pdf_filename": bundle.canonical_pdf.name,
+            "pdf_sha256": canonical.sha256 if canonical else "",
+            "document_profile": bundle.metadata.document_profile,
+        },
+        "read_strategy": [
+            "Read diagnosis, selected_evidence and candidate_section_index first.",
+            "Filter candidate_catalog by the failed target; do not read every candidate by default.",
+            "Open source_sections only for unresolved extraction or profile questions.",
+            "Use the PDF pages only to visually confirm a proposed span when JSON remains ambiguous.",
+        ],
+        "diagnosis": {
+            "errors": list(result.qa.get("errors", [])),
+            "warnings": list(result.qa.get("warnings", [])),
+            "triage": result.qa.get("triage", {}),
+            "coverage": result.qa.get("coverage_ledger", {}),
+            "stage2": result.qa.get("stage2", {}),
+        },
+        "structured_source": bundle.structured_source,
+        "selected_evidence": result.qa.get("evidence_ledger", []),
+        "candidate_section_index": section_index,
+        "candidate_catalog": catalog,
+        "source_sections": source_sections,
+        "required_output": {
+            "format": "luna_repair_plan_v1 JSON only",
+            "example": {
+                "schema_version": "luna_repair_plan_v1",
+                "identity": {
+                    "doi": bundle.metadata.doi,
+                    "pdf_sha256": canonical.sha256 if canonical else "",
+                },
+                "assignments": [
+                    {"candidate_id": "c00042", "target": "results", "mode": "strict", "reason": "short rationale"}
+                ],
+                "advisory_actions": [],
+            },
+            "allowed_actions": [
+                "assign_candidate_to_target",
+                "change_document_profile",
+                "request_official_structured_source",
+                "report_unresolved_extraction",
+                "propose_general_rule_with_regression_test",
+            ],
+            "forbidden_actions": [
+                "write_paraphrased_digest_prose",
+                "invent_or infer missing facts",
+                "lower a quality or grounding gate",
+                "bypass access controls",
+            ],
+        },
+    }
+
+
 def write_artifacts(result: CompiledDigest, output_dir: Path) -> ArtifactPaths:
     """Write the grounded Markdown plus its QA report and two audit ledgers.
 
@@ -79,6 +196,7 @@ def write_artifacts(result: CompiledDigest, output_dir: Path) -> ArtifactPaths:
     qa_path = output_dir / f"{stem}.qa.json"
     metadata_path = output_dir / f"{stem}.metadata-evidence.json"
     coverage_path = output_dir / f"{stem}.evidence-coverage.json"
+    luna_path: Path | None = None
 
     markdown_path.write_text(result.markdown, encoding="utf-8")
     _write_json(qa_path, result.qa)
@@ -92,4 +210,9 @@ def write_artifacts(result: CompiledDigest, output_dir: Path) -> ArtifactPaths:
         },
     )
     _write_json(coverage_path, result.qa.get("coverage_ledger", {}))
-    return ArtifactPaths(markdown_path, qa_path, metadata_path, coverage_path)
+    if result.status != "SOURCE_READY":
+        packet = _luna_repair_packet(result)
+        if packet is not None:
+            luna_path = output_dir / f"{stem}.luna-repair-input.json"
+            _write_json(luna_path, packet)
+    return ArtifactPaths(markdown_path, qa_path, metadata_path, coverage_path, luna_path)

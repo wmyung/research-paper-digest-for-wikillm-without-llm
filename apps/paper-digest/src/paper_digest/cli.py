@@ -33,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--disable-stage2", action="store_true", help="Disable diagnosis-driven Stage-2 repair.")
     parser.add_argument("--stage2-min-score", type=float, default=0.70, help="Minimum raw score eligible for Stage 2.")
     parser.add_argument("--stage2-max-rounds", type=int, default=3, help="Stage-2 repair rounds, from 1 to 6.")
+    parser.add_argument(
+        "--repair-plan",
+        type=Path,
+        default=None,
+        help="Validated luna_repair_plan_v1 JSON containing grounded candidate assignments.",
+    )
     parser.add_argument("--offline", action="store_true", help="Disable DOI-registry metadata repair.")
     parser.add_argument(
         "--verify-pdf-path",
@@ -58,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
             enable_stage2=not args.disable_stage2,
             stage2_min_score=args.stage2_min_score,
             stage2_max_rounds=args.stage2_max_rounds,
+            external_repair_plan=args.repair_plan,
         )
     except ValueError as exc:
         parser.error(str(exc))

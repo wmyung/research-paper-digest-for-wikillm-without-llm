@@ -30,6 +30,7 @@ ranks on ``raw_quality_score``.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -62,6 +63,7 @@ BOUNDARY_RE = re.compile(
     r"was not|were not|cannot|could not|uncertain|limitation)\b",
     re.I,
 )
+MISSING_TARGET_RE = re.compile(r"No grounded evidence unit was selected for ([a-z]+)\.", re.I)
 
 
 # --------------------------------------------------------------------------- #
@@ -174,6 +176,61 @@ def drop_ungrounded_units(bundle, config, profile, selection, qa) -> Selection |
     return amended if _units(amended) < _units(selection) else None
 
 
+def apply_external_repair_plan(bundle, config, profile, selection, qa) -> Selection | None:
+    """Apply only grounded candidate IDs from an explicit Luna repair plan.
+
+    Arbitrary prose is impossible here: an assignment must reference a
+    candidate emitted by this compiler, match the canonical PDF hash, and
+    satisfy the target's deterministic strict/approved-relaxed scoring rule.
+    The ordinary Stage-2 regression guard then decides whether the complete
+    proposal is an improvement.
+    """
+    path = config.external_repair_plan
+    if path is None:
+        return None
+    path = path.expanduser().resolve()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema_version") != "luna_repair_plan_v1":
+        raise ValueError("external repair plan must use schema_version luna_repair_plan_v1")
+    identity = payload.get("identity")
+    if not isinstance(identity, dict):
+        raise ValueError("external repair plan identity is required")
+    canonical = next((item for item in bundle.files if item.role == "canonical-paper"), None)
+    expected_sha = canonical.sha256 if canonical else ""
+    if not expected_sha or str(identity.get("pdf_sha256") or "").casefold() != expected_sha.casefold():
+        raise ValueError("external repair plan PDF SHA-256 does not match the canonical source")
+    plan_doi = str(identity.get("doi") or "").strip().casefold()
+    if plan_doi and plan_doi != bundle.metadata.doi.strip().casefold():
+        raise ValueError("external repair plan DOI does not match the canonical source")
+    assignments = payload.get("assignments")
+    if not isinstance(assignments, list) or not 1 <= len(assignments) <= 20:
+        raise ValueError("external repair plan assignments must contain 1 to 20 items")
+    by_id = {f"c{item.order:05d}": item for item in profile.candidates}
+    amended = _copy(selection)
+    changed = False
+    for assignment in assignments:
+        if not isinstance(assignment, dict):
+            raise ValueError("external repair plan assignment must be an object")
+        candidate_id = str(assignment.get("candidate_id") or "")
+        target = str(assignment.get("target") or "").casefold()
+        mode = str(assignment.get("mode") or "strict").casefold()
+        candidate = by_id.get(candidate_id)
+        if candidate is None or target not in REFILLABLE:
+            raise ValueError(f"invalid external repair assignment: {candidate_id!r} -> {target!r}")
+        if target not in profile.document_profile.applicable_targets:
+            raise ValueError(f"external repair target is not applicable to this document profile: {target}")
+        relaxed = mode == "relaxed"
+        if mode not in {"strict", "relaxed"} or (relaxed and target not in RELAXABLE):
+            raise ValueError(f"external repair mode is not allowed for target: {target}")
+        if score_for(candidate, target, relaxed=relaxed) <= 0.0:
+            raise ValueError(f"external repair candidate does not satisfy target rules: {candidate_id} -> {target}")
+        for donor in amended:
+            amended[donor] = [item for item in amended[donor] if item is not candidate]
+        amended = _add(amended, target, [candidate])
+        changed = True
+    return amended if changed and amended != selection else None
+
+
 def refill_sections(bundle, config, profile, selection, qa) -> Selection | None:
     """Re-select for each underdeveloped section the source can still fill.
 
@@ -212,6 +269,64 @@ def refill_sections(bundle, config, profile, selection, qa) -> Selection | None:
             continue
         amended = _add(amended, target, chosen)
         changed = True
+    return amended if changed else None
+
+
+def fill_missing_targets(bundle, config, profile, selection, qa) -> Selection | None:
+    """Fill an explicitly empty applicable target before density repair.
+
+    Empty sections used to be visible only as a generic supplement/profile
+    warning. This operator turns that exact diagnosis into a bounded selection
+    retry. It first uses an unclaimed cue-matching unit, then (only for the
+    already-approved RELAXABLE targets) a section-grounded relaxed unit. As a
+    last resort it moves a valid unit from a donor that remains above its own
+    floor; the normal Stage-2 regression guard rejects any harmful move.
+    """
+    missing = {
+        match.group(1).casefold()
+        for error in qa.get("errors", [])
+        if (match := MISSING_TARGET_RE.search(error))
+    }
+    targets = [target for target in ORDER if target in missing and target in REFILLABLE]
+    if not targets or not profile.candidates:
+        return None
+    amended = _copy(selection)
+    changed = False
+    for target in targets:
+        if amended.get(target):
+            continue
+        kwargs = {
+            "budget": BUDGETS.get(target, 300),
+            "limit": max(1, min(3, LIMITS.get(target, 3))),
+            "taken": _taken(amended, target),
+            "redundancy": 0.72,
+        }
+        fresh = select(profile.candidates, target, **kwargs)
+        if not fresh and target in RELAXABLE:
+            fresh = select(profile.candidates, target, relaxed=True, **kwargs)
+        if fresh:
+            amended = _add(amended, target, fresh)
+            changed = True
+            continue
+
+        floors = config.section_min_words
+        moves: list[tuple[float, int, str, Candidate]] = []
+        for donor, items in amended.items():
+            if donor == target or donor not in REFILLABLE:
+                continue
+            for item in items:
+                gain = score_for(item, target, relaxed=target in RELAXABLE)
+                if gain <= 0.0:
+                    continue
+                loss = score_for(item, donor, relaxed=donor in RELAXABLE)
+                moves.append((loss - gain, item.order, donor, item))
+        for _cost, _order, donor, item in sorted(moves, key=lambda value: (value[0], value[1], value[2])):
+            if _words(amended[donor]) - word_count(item.text) < floors.get(donor, 0):
+                continue
+            amended[donor] = [other for other in amended[donor] if other is not item]
+            amended = _add(amended, target, [item])
+            changed = True
+            break
     return amended if changed else None
 
 
@@ -411,9 +526,11 @@ class RepairOperator:
 # Removals run before additions: a leaked or repeated unit should not be
 # counted as section content that a refill then decides is sufficient.
 OPERATORS: tuple[RepairOperator, ...] = (
+    RepairOperator("apply_external_repair_plan", "validated grounded candidate assignments", apply_external_repair_plan),
     RepairOperator("drop_leaked_units", "extraction and checklist artifacts", drop_leaked_units),
     RepairOperator("drop_repeated_units", "cross-section duplication", drop_repeated_units),
     RepairOperator("drop_ungrounded_units", "verbatim grounding", drop_ungrounded_units),
+    RepairOperator("fill_missing_targets", "empty applicable digest section", fill_missing_targets),
     RepairOperator("refill_sections", "section density floors", refill_sections),
     RepairOperator("reallocate_units", "section density floors", reallocate_units),
     RepairOperator("fix_contribution_items", "key-contribution item band", fix_contribution_items),

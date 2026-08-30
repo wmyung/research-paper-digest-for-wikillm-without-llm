@@ -15,7 +15,7 @@ text is never sent to the registry.
 
 ```bash
 python -m pip install -e .
-paper-digest paper.pdf supplement.pdf tables.xlsx -o output
+paper-digest paper.pdf fulltext.xml supplement.pdf tables.xlsx -o output
 paper-digest --offline paper.pdf -o output
 ```
 

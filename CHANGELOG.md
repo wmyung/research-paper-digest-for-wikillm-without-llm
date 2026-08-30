@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.3.0
+
+This release targets the production failures that remained after 2.2.1 while
+preserving the fail-closed evidence, grounding and score gates.
+
+- Stage 1 now reports deterministic selection diagnostics; empty targets are
+  repaired after diagnosis instead of changing the proven risk-ordered claim
+  sequence for every paper.
+- Stage 2 now retries an explicitly empty target and can consume an optional
+  `luna_repair_plan_v1` file. A plan can only move compiler-emitted candidate
+  IDs whose PDF SHA-256, DOI and target score validate; arbitrary model prose
+  is never accepted.
+- Official JATS XML is supported as a structural source. Every retained XML
+  sentence must first align to a page in the canonical PDF, and JATS is selected
+  only as a fallback when PDF prose is below the source-body floor and XML
+  alignment, word coverage and section coverage clear conservative thresholds.
+- Publisher article-type labels, real section topology and short-document
+  structure now act as document-profile priors, reducing empirical-profile
+  false positives for correspondence, reviews and editorials.
+- Failed artifacts emit a rich, JSON-first `*.luna-repair-input.json` containing
+  exact gates, selected evidence, candidate IDs/scores, page references and
+  source sections. It instructs a small model to read only the failed target
+  first and return a bounded repair plan.
+- `qa.triage` exposes near-ready priority, candidate counts, profile ranking,
+  selection diagnostics and structured-source status.
+
 ## 2.2.1
 
 Validated against a frozen, stratified set of 50 production papers: 40 prior

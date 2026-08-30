@@ -33,8 +33,8 @@ BUDGETS = {
     "related": 480,
 }
 LIMITS = {"information": 8, "contributions": 7, "methods": 26, "results": 28, "limitations": 9, "related": 10}
-# Targets are filled in this order; earlier targets claim a sentence first, so
-# a limitation never reappears as a contribution.
+# Targets are filled in this order; high-risk semantic targets reserve their
+# cue-matching evidence before broader results and methods selection.
 ORDER = ("summary", "information", "limitations", "related", "contributions", "results", "methods")
 # Targets whose meaning comes from the source section itself may be filled
 # without a cue match. Limitations is not one of them: a limitation is defined
@@ -223,6 +223,7 @@ class UniversalProfile:
         self.section_capacity: dict[str, int] = {}
         self.candidates: list[Candidate] = []
         self.relaxed_targets: list[str] = []
+        self.selection_diagnostics: dict[str, object] = {}
 
     def score(self, bundle: ParsedBundle) -> ProfileScore:
         sections = {name for name, value in bundle.sections.items() if value.paragraphs}
@@ -232,7 +233,19 @@ class UniversalProfile:
 
     def classify(self, bundle: ParsedBundle) -> None:
         metadata = bundle.metadata
-        profile, ranking = classify_document(metadata.title, metadata.abstract, bundle.full_text, metadata.article_type)
+        populated_sections = {name for name, section in bundle.sections.items() if section.paragraphs}
+        page_count = next(
+            (item.page_count for item in bundle.files if item.role == "canonical-paper" and item.page_count),
+            len(bundle.page_texts) or None,
+        )
+        profile, ranking = classify_document(
+            metadata.title,
+            metadata.abstract,
+            bundle.full_text,
+            metadata.article_type,
+            section_names=populated_sections,
+            page_count=page_count,
+        )
         self.document_profile = profile
         self.profile_ranking = ranking
         metadata.document_profile = profile.key
@@ -276,6 +289,9 @@ class UniversalProfile:
         candidates = build_candidates(bundle)
         self.candidates = candidates
         scale = 1.0 + self.repair_pass * 0.18
+        active = tuple(
+            target for target in ORDER if target == "summary" or target in profile.applicable_targets
+        )
         selected: dict[str, list[Candidate]] = {}
         taken: list[Candidate] = []
         for target in ORDER:
@@ -391,6 +407,23 @@ class UniversalProfile:
             for target in ORDER
         }
         self.relaxed_targets = relaxed_targets
+        self.selection_diagnostics = {
+            "algorithm": "risk-ordered-mmr",
+            "candidate_count": len(candidates),
+            "active_targets": list(active),
+            "first_selected": {
+                target: {
+                    "page": items[0].page_start,
+                    "order": items[0].order,
+                    "section": items[0].section,
+                    "score": round(score_for(items[0], target), 4),
+                }
+                for target, items in selected.items()
+                if items
+            },
+            "empty_targets": [target for target in active if not selected.get(target)],
+            "relaxed_targets": list(relaxed_targets),
+        }
         return selected
 
     def render(self, bundle: ParsedBundle, selection: dict[str, list[Candidate]]) -> ProfileContent:

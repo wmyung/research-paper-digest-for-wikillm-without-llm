@@ -29,6 +29,7 @@ def digest_research_paper(
     enable_stage2: bool = True,
     stage2_min_score: float = 0.70,
     stage2_max_rounds: int = 3,
+    repair_plan_path: str | None = None,
 ) -> dict[str, Any]:
     """Convert a local PDF and optional supplements to WikiLLM Markdown and QA JSON.
 
@@ -52,6 +53,7 @@ def digest_research_paper(
             enable_stage2=enable_stage2,
             stage2_min_score=stage2_min_score,
             stage2_max_rounds=stage2_max_rounds,
+            external_repair_plan=Path(repair_plan_path).expanduser().resolve() if repair_plan_path else None,
         ),
     )
     paths = write_artifacts(result, destination)
@@ -63,6 +65,7 @@ def digest_research_paper(
         "qa_path": str(paths.qa),
         "metadata_evidence_path": str(paths.metadata_evidence),
         "evidence_coverage_path": str(paths.evidence_coverage),
+        "luna_repair_input_path": str(paths.luna_repair_input) if paths.luna_repair_input else None,
         "document_profile": result.qa.get("document_profile"),
         "quality_score": result.qa.get("quality_score"),
         "raw_quality_score": result.qa.get("raw_quality_score"),

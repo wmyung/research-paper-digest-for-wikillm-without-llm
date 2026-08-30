@@ -1,8 +1,7 @@
 """End-to-end: a synthetic publisher PDF compiles to a certified source record."""
 
-from __future__ import annotations
-
 import json
+from dataclasses import replace
 
 import pytest
 from paper_digest.artifacts import write_artifacts
@@ -74,6 +73,22 @@ def test_artifacts_are_written_as_markdown_plus_a_qa_sidecar(digest, tmp_path):
     payload = json.loads(qa_path.read_text(encoding="utf-8"))
     assert payload["source_ready"] is True
     assert payload["coverage_ledger"]["slots"]
+
+
+def test_failed_artifact_emits_a_json_first_luna_repair_packet(digest, tmp_path):
+    failed = replace(
+        digest,
+        status="NOT_SOURCE_READY",
+        qa={**digest.qa, "source_ready": False, "errors": ["No grounded evidence unit was selected for related."]},
+    )
+    paths = write_artifacts(failed, tmp_path)
+
+    assert paths.luna_repair_input is not None
+    payload = json.loads(paths.luna_repair_input.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "wikillm-luna-repair-input-v1"
+    assert payload["candidate_catalog"]
+    assert payload["source_sections"]
+    assert payload["required_output"]["format"] == "luna_repair_plan_v1 JSON only"
 
 
 def test_two_documents_sharing_a_stem_do_not_overwrite_each_other(tmp_path):

@@ -14,15 +14,26 @@ from .evidence import metadata_ledger
 from .inventory import inventory
 from .metadata import enrich_from_doi_registry, extract_publication_metadata
 from .models import CompiledDigest, ParsedBundle, WorkbookSheet
-from .parsers import extract_docx, extract_pdf, extract_workbook
+from .parsers import JATSExtraction, extract_docx, extract_jats, extract_pdf, extract_workbook
 from .profiles.base import ProfileContent, ProfileScore
 from .profiles.classifier import choose_profile
-from .profiles.universal import UniversalProfile
+from .profiles.universal import ORDER, UniversalProfile
 from .qa import evaluate_digest
 from .repair import repair_digest
 from .sections import segment_sections
-from .selection import Candidate
-from .text import normalize_prose
+from .selection import Candidate, score_for
+from .text import normalize_prose, word_count
+
+SCIENTIFIC_SECTIONS = {
+    "Abstract",
+    "Introduction",
+    "Objectives",
+    "Methods",
+    "Results",
+    "Discussion",
+    "Conclusion",
+    "Limitations",
+}
 
 
 def _csv_sheet(path: Path) -> WorkbookSheet:
@@ -74,11 +85,95 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
     metadata = extract_publication_metadata(canonical_extraction, canonical)
     if config.enable_doi_metadata:
         enrich_from_doi_registry(metadata, config.doi_metadata_timeout_seconds)
-    sections = segment_sections(canonical_extraction.blocks, canonical.name)
+    pdf_sections = segment_sections(canonical_extraction.blocks, canonical.name)
+    sections = pdf_sections
+    source_blocks = canonical_extraction.blocks
+    source_full_text = canonical_extraction.full_text
+
+    structured_source: dict[str, Any] = {
+        "mode": "pdf-layout",
+        "selected": False,
+        "candidates": [],
+    }
+    parsed_jats: list[tuple[JATSExtraction, dict[str, Any], dict[str, Any]]] = []
+    if config.enable_structured_xml:
+        for xml_path in (path for path in unique_paths if path.suffix.casefold() == ".xml"):
+            diagnostic: dict[str, Any] = {"file": xml_path.name, "selected": False}
+            try:
+                extraction = extract_jats(xml_path, canonical_extraction.page_texts, canonical.name)
+                jats_sections = segment_sections(extraction.blocks, canonical.name)
+                section_count = len(SCIENTIFIC_SECTIONS & {name for name, value in jats_sections.items() if value.paragraphs})
+                diagnostic.update(
+                    {
+                        "aligned_sentences": extraction.aligned_sentences,
+                        "total_sentences": extraction.total_sentences,
+                        "alignment_ratio": extraction.alignment_ratio,
+                        "aligned_words": extraction.aligned_words,
+                        "scientific_sections": section_count,
+                    }
+                )
+                parsed_jats.append((extraction, diagnostic, jats_sections))
+            except Exception as exc:
+                diagnostic["held_reason"] = f"{type(exc).__name__}: {exc}"
+            structured_source["candidates"].append(diagnostic)
+
+    if parsed_jats:
+        extraction, diagnostic, jats_sections = max(
+            parsed_jats,
+            key=lambda item: (
+                int(item[1]["scientific_sections"]),
+                int(item[1]["aligned_words"]),
+                float(item[1]["alignment_ratio"]),
+                item[0].path.name,
+            ),
+        )
+        pdf_words = word_count(canonical_extraction.full_text)
+        pdf_section_count = len(
+            SCIENTIFIC_SECTIONS & {name for name, value in pdf_sections.items() if value.paragraphs}
+        )
+        aligned_enough = (
+            extraction.aligned_sentences >= config.jats_min_aligned_sentences
+            and extraction.alignment_ratio >= config.jats_min_alignment_ratio
+        )
+        minimum_words = min(config.min_body_words, max(400, int(pdf_words * 0.65)))
+        content_sufficient = extraction.aligned_words >= minimum_words
+        source_needs_help = pdf_words < config.min_body_words
+        # Never replace a PDF extraction that already clears the source-body
+        # floor. Real-data controls showed that richer JATS headings alone are
+        # not proof that the aligned subset will compile a better digest. JATS
+        # is therefore a recovery fallback for genuinely short PDF prose only.
+        selected = (
+            aligned_enough
+            and content_sufficient
+            and int(diagnostic["scientific_sections"]) >= 2
+            and source_needs_help
+        )
+        diagnostic["selected"] = selected
+        diagnostic["pdf_words"] = pdf_words
+        diagnostic["pdf_scientific_sections"] = pdf_section_count
+        if selected:
+            sections = jats_sections
+            source_blocks = extraction.blocks
+            source_full_text = extraction.full_text
+            structured_source.update(
+                {
+                    "mode": "jats-xml-aligned-to-pdf",
+                    "selected": True,
+                    "file": extraction.path.name,
+                    "alignment_ratio": extraction.alignment_ratio,
+                    "aligned_sentences": extraction.aligned_sentences,
+                    "aligned_words": extraction.aligned_words,
+                }
+            )
+            if extraction.article_type and metadata.article_type.casefold() in {"", "article", "journal article"}:
+                metadata.article_type = extraction.article_type
+                metadata.metadata_sources.append("JATS XML")
 
     supplements_text: dict[str, str] = {}
     workbooks: list[WorkbookSheet] = []
     parser_notes = [canonical_extraction.extractor]
+    if structured_source["selected"]:
+        parser_notes.append("jats-xml-aligned-to-pdf")
     if "Crossref DOI registry" in metadata.metadata_sources:
         parser_notes.append("crossref-doi-metadata")
 
@@ -86,6 +181,8 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
         if path == canonical:
             continue
         suffix = path.suffix.casefold()
+        if suffix == ".xml":
+            continue
         try:
             if suffix == ".pdf":
                 extraction = extract_pdf(
@@ -112,9 +209,9 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
     return ParsedBundle(
         files=files,
         canonical_pdf=canonical,
-        blocks=canonical_extraction.blocks,
+        blocks=source_blocks,
         sections=sections,
-        full_text=canonical_extraction.full_text,
+        full_text=source_full_text,
         page_texts=canonical_extraction.page_texts,
         metadata=metadata,
         workbooks=workbooks,
@@ -125,6 +222,7 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
         table_caption_count=canonical_extraction.table_caption_count,
         grounding_text=canonical_extraction.grounding_text,
         labelled_fields={item.label: item.value for item in canonical_extraction.metadata_fields},
+        structured_source=structured_source,
     )
 
 
@@ -136,6 +234,30 @@ class _Stage1State:
     profile_scores: list[ProfileScore]
     selection: dict[str, list[Candidate]]
     content: ProfileContent
+
+
+def _annotate_triage(qa: dict[str, Any], profile: UniversalProfile, bundle: ParsedBundle) -> None:
+    """Attach compact, machine-readable diagnostics for cheap failure triage."""
+    counts = {
+        target: {
+            "strict": sum(1 for item in profile.candidates if score_for(item, target) > 0.0),
+            "relaxed": sum(1 for item in profile.candidates if score_for(item, target, relaxed=True) > 0.0),
+        }
+        for target in ORDER
+    }
+    raw = float(qa.get("raw_quality_score", qa.get("quality_score", 0.0)))
+    errors = list(qa.get("errors", []))
+    near_ready = bool(errors) and raw >= 0.90 and len(errors) <= 2
+    qa["triage"] = {
+        "near_ready": near_ready,
+        "priority": "certified" if not errors else ("fast-lane" if near_ready else "structural"),
+        "raw_quality_score": raw,
+        "hard_error_count": len(errors),
+        "candidate_counts": counts,
+        "selection": dict(profile.selection_diagnostics),
+        "document_profile_ranking": [list(item) for item in profile.profile_ranking],
+        "structured_source": dict(bundle.structured_source),
+    }
 
 
 def _stage1_candidate_rank(qa: dict[str, Any]) -> tuple[int, float, int, int]:
@@ -163,10 +285,12 @@ def _stage2(
     """
     if not config.enable_stage2:
         best.qa["stage2"] = {"ran": False, "reason": "disabled"}
+        _annotate_triage(best.qa, state.profile, bundle)
         return best
     raw_score = float(best.qa.get("raw_quality_score", best.qa["quality_score"]))
-    if raw_score < config.stage2_min_score:
+    if raw_score < config.stage2_min_score and config.external_repair_plan is None:
         best.qa["stage2"] = {"ran": False, "reason": "below-stage2-window", "raw_quality_score": raw_score}
+        _annotate_triage(best.qa, state.profile, bundle)
         return best
     repaired = repair_digest(
         bundle=bundle,
@@ -181,7 +305,9 @@ def _stage2(
     )
     if repaired is None:
         best.qa.setdefault("stage2", {"ran": True, "reason": "no-accepted-operator"})
+        _annotate_triage(best.qa, state.profile, bundle)
         return best
+    _annotate_triage(repaired.qa, state.profile, bundle)
     return CompiledDigest(
         status="SOURCE_READY" if repaired.qa["source_ready"] else "NOT_SOURCE_READY",
         markdown=repaired.markdown,
@@ -229,6 +355,7 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
             )
             qa["repair_pass"] = repair_pass + 1
             qa["repair_passes_allowed"] = config.repair_passes
+            _annotate_triage(qa, profile, bundle)
             status = "SOURCE_READY" if qa["source_ready"] else "NOT_SOURCE_READY"
             candidate = CompiledDigest(
                 status=status,
