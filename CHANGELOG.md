@@ -1,5 +1,48 @@
 # Changelog
 
+## 2.2.0
+
+Stage 1 recompiles the whole digest with a larger evidence budget and never
+reads the QA report, so a record that fails structurally is unchanged by all
+four of its passes. This release adds a second stage that reads the failing
+gates instead.
+
+### Stage-2 diagnosis-driven repair (`repair.py`)
+
+- Ten operators, one per failing gate: drop leaked, repeated or ungrounded
+  units; refill or reallocate an underdeveloped section; correct the
+  Key Contributions band; recover quantitative anchors; restore a boundary
+  statement; trim density; and repair a failing retrieval question.
+- Operators amend the *selection* and the digest is rebuilt from it by the new
+  `UniversalProfile.render`, so the prose, both ledgers and the retrieval
+  questions stay consistent and every unit remains a verbatim source span. A
+  repair therefore cannot break the grounding gate.
+- `reallocate_units` revisits Stage 1's irrevocable first-claim rule: a sentence
+  moves to a section under its floor from one above its own when it scores for
+  both. This is the repair Stage 1 structurally cannot make.
+- Acceptance is monotone: a proposal is discarded if it makes any previously
+  passing check fail or introduces a new gate failure, and accepted only if it
+  strictly improves `(fewer errors, higher raw score, fewer warnings)`. Gate
+  identity ignores the measurements an error quotes, so a partial repair of a
+  section reads as progress rather than as a new failure.
+- When no single operator helps, each operator blocked by a regression is
+  retried paired with one follow-up and the pair is judged as one atomic move.
+- `qa.stage2` records every accepted and rejected proposal with the reason.
+- A shortfall the source cannot fill, or one fillable only with near-duplicate
+  prose, is left standing; the record stays `NOT_SOURCE_READY`.
+
+### Score reporting
+
+- `raw_quality_score` is reported alongside `quality_score`. The published score
+  is clamped to `threshold - 0.01` for every record carrying a hard error, which
+  collapses an entire failing benchmark onto one value and makes it useless for
+  ranking near misses. Stage 2 and triage use the unclamped score.
+
+### Options
+
+- `enable_stage2` (default true), `stage2_min_score` (default 0.70) and
+  `stage2_max_rounds` (default 3).
+
 ## 2.1.0
 
 Aligned the record with the LLM Wiki source-record standard published in

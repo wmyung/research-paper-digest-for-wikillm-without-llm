@@ -78,9 +78,23 @@ the Firecrawl `backend` network.
      `CHECKS`.
 9. **Retrieval regression** (`retrieval.py`)
    - deterministic BM25 tests against full English research questions.
-10. **Automatic retry** (`pipeline.py`)
+10. **Stage-1 automatic retry** (`pipeline.py`)
    - up to four evidence-budget passes; the first candidate clearing every hard
-     gate and the score threshold is returned.
+     gate and the score threshold is returned;
+   - the retry never reads the QA report, so a record that fails structurally
+     is unchanged by it.
+11. **Stage-2 diagnosis-driven repair** (`repair.py`)
+   - runs on the best Stage-1 candidate when it still fails and its unclamped
+     score is at or above `stage2_min_score`;
+   - reads the failing gates and applies one targeted operator per gate to the
+     *selection*, then rebuilds the digest, both ledgers and the retrieval
+     questions from the amended selection through `UniversalProfile.render`;
+   - because every unit stays a verbatim source span, a repair cannot break the
+     grounding gate;
+   - a proposal is discarded when it makes any previously passing check fail or
+     introduces a new gate failure, and accepted only when it strictly improves
+     `(fewer errors, higher raw score, fewer warnings)`;
+   - `qa.stage2` records every accepted and rejected proposal.
 
 ## Grounding by construction
 

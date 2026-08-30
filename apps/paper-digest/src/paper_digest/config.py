@@ -57,6 +57,12 @@ class DigestConfig:
     profile_confidence_threshold: float = 0.55
     source_ready_threshold: float = 0.95
     repair_passes: int = 4
+    # Stage-2 reads the QA report and repairs the failing gates. Its window
+    # is measured on the unclamped score, because the published score is
+    # pinned just below the threshold for every failing record.
+    enable_stage2: bool = True
+    stage2_min_score: float = 0.70
+    stage2_max_rounds: int = 3
     enable_ocr: bool = True
     ocr_language: str = "eng"
     enable_doi_metadata: bool = True
@@ -104,5 +110,9 @@ class DigestConfig:
             raise ValueError("max_archive_ratio must be > 1.")
         if not 1 <= self.repair_passes <= 8:
             raise ValueError("repair_passes must be between 1 and 8.")
+        if not 0.0 <= self.stage2_min_score < self.source_ready_threshold:
+            raise ValueError("stage2_min_score must be in [0, source_ready_threshold).")
+        if not 1 <= self.stage2_max_rounds <= 6:
+            raise ValueError("stage2_max_rounds must be between 1 and 6.")
         if not 0.5 <= self.doi_metadata_timeout_seconds <= 30:
             raise ValueError("doi_metadata_timeout_seconds must be between 0.5 and 30.")

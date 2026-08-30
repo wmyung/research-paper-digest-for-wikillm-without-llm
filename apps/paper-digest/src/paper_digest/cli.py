@@ -56,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
                     "status": result.status,
                     **paths.as_dict(),
                     "quality_score": result.qa.get("quality_score"),
+                    "raw_quality_score": result.qa.get("raw_quality_score"),
+                    "stage2_operators": result.qa.get("stage2", {}).get("operators_accepted", []),
                     "document_profile": result.qa.get("document_profile"),
                     "errors": result.qa.get("errors", []),
                     "warnings": result.qa.get("warnings", []),

@@ -104,6 +104,57 @@ padding it would mean inventing glosses the paper never wrote.
 - digest-to-source ratio warned outside 0.05-0.80;
 - at least ten full-question BM25 regressions, all passing in the top ten.
 
-The default score threshold is 0.95. Up to four repair passes increase evidence
-budgets and rerun the complete gate set. A hard error always prevents
-`SOURCE_READY`, regardless of weighted score.
+## Scores
+
+The default score threshold is 0.95. Two scores are reported:
+
+- `quality_score` is the published score. Whenever a hard error exists it is
+  clamped to `source_ready_threshold - 0.01`, so every failing record collapses
+  onto that single value. A benchmark run at threshold 0.80 therefore reports
+  0.79 for every failing record; that value is a clamp artifact and says nothing
+  about how close the record came to the gate.
+- `raw_quality_score` is the unclamped weighted score. Rank and triage failing
+  records by this one.
+
+## Repair stages
+
+**Stage 1** runs up to four passes that increase evidence budgets and rerun the
+complete gate set. It never reads the QA report, and it fills targets in a fixed
+order where the first target to claim a sentence keeps it, so a record that
+fails structurally does not move across its four passes.
+
+**Stage 2** runs when Stage 1 leaves a record failing and `raw_quality_score` is
+at or above `stage2_min_score` (0.70 by default). It reads the failing gates and
+applies one targeted operator per gate to the *selection*, then rebuilds the
+digest, the evidence and coverage ledgers and the retrieval questions from the
+amended selection. Repairing the selection rather than the prose is what keeps
+those artifacts consistent, and it means every unit is still a verbatim source
+span, so a repair cannot break the grounding gate.
+
+| Operator | Gate it repairs |
+| --- | --- |
+| `drop_leaked_units` | soft-hyphen residue, checklist and table rows, process markers |
+| `drop_repeated_units` | the same sentence claimed by two sections |
+| `drop_ungrounded_units` | prose the grounding audit cannot match to the source |
+| `refill_sections` | a section under its floor while the source still has unclaimed material |
+| `reallocate_units` | a section under its floor while another sits above its own with a sentence that scores for both |
+| `fix_contribution_items` | the Key Contributions item band |
+| `add_quantitative_anchors` | effect sizes and test statistics the selection left behind |
+| `add_boundary_statement` | a missing null, uncertainty or boundary sentence |
+| `trim_density` | body and prose-unit length limits |
+| `repair_retrieval` | a research question the digest can no longer answer |
+
+Acceptance is monotone: a proposal is discarded if it makes any previously
+passing check fail or introduces a new gate failure, and accepted only if it
+strictly improves `(fewer errors, higher raw score, fewer warnings)`. The loop
+therefore cannot oscillate and stops at a fixpoint. Gate identity ignores the
+measurements an error quotes, so partially repairing a section is recognised as
+progress rather than as a new failure. When no single operator helps, each
+operator blocked by a regression is retried paired with one follow-up and the
+pair is judged as one atomic move.
+
+Stage 2 reports what it could not do. A shortfall the source cannot fill, or one
+that could only be filled with near-duplicate prose, is left standing and the
+record stays `NOT_SOURCE_READY`; `qa.stage2.trail` records the rejected
+proposals and why. A hard error always prevents `SOURCE_READY`, regardless of
+weighted score.

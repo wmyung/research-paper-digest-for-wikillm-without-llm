@@ -5,4 +5,4 @@ Every prose sentence in the output is a verbatim span of the source PDF, and
 embedding, reranking or vision-language model is loaded or called.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"

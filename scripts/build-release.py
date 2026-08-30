@@ -138,7 +138,7 @@ def main() -> int:
 
     manifest = {
         "success": True,
-        "version": "2.1.0",
+        "version": "2.2.0",
         "source_root": str(root),
         "archives": {
             "release": main_result,

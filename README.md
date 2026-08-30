@@ -171,6 +171,7 @@ must treat only `SOURCE_READY` as certified.
 | Fabrication control | Post-hoc verbatim grounding audit over the alphanumeric skeleton |
 | Thin sections | Cue-anchored passage expansion: the paragraph around a cue is taken whole |
 | Missing coverage | Up to four deterministic repair passes, then an explicit statement of absence |
+| Stalled records | Stage-2 repair: one targeted operator per failing gate, under a monotone acceptance rule |
 | Retrieval validation | BM25 full-question regression suite |
 | Bibliographic repair | Optional DOI-only Crossref lookup |
 | LLM, embedding, VLM calls | None |

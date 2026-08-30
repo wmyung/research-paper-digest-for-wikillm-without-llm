@@ -4,6 +4,7 @@ import csv
 import json
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
@@ -14,9 +15,13 @@ from .inventory import inventory
 from .metadata import enrich_from_doi_registry, extract_publication_metadata
 from .models import CompiledDigest, ParsedBundle, WorkbookSheet
 from .parsers import extract_docx, extract_pdf, extract_workbook
+from .profiles.base import ProfileContent, ProfileScore
 from .profiles.classifier import choose_profile
+from .profiles.universal import UniversalProfile
 from .qa import evaluate_digest
+from .repair import repair_digest
 from .sections import segment_sections
+from .selection import Candidate
 from .text import normalize_prose
 
 
@@ -123,6 +128,60 @@ def build_bundle(paths: list[Path], config: DigestConfig, work_dir: Path) -> Par
     )
 
 
+@dataclass(slots=True)
+class _Stage1State:
+    """What Stage 2 needs to rebuild the digest from an amended selection."""
+
+    profile: UniversalProfile
+    profile_scores: list[ProfileScore]
+    selection: dict[str, list[Candidate]]
+    content: ProfileContent
+
+
+def _stage2(
+    best: CompiledDigest,
+    state: _Stage1State,
+    bundle: ParsedBundle,
+    config: DigestConfig,
+) -> CompiledDigest:
+    """Repair the best Stage-1 candidate against the gates it actually failed.
+
+    Stage 1 never reads the QA report, so a record that fails structurally is
+    unchanged by its four budget passes. The trigger uses the unclamped score:
+    the published one is pinned to threshold - 0.01 for every failing record
+    and therefore says nothing about how far the record is from the gate.
+    """
+    if not config.enable_stage2:
+        best.qa["stage2"] = {"ran": False, "reason": "disabled"}
+        return best
+    raw_score = float(best.qa.get("raw_quality_score", best.qa["quality_score"]))
+    if raw_score < config.stage2_min_score:
+        best.qa["stage2"] = {"ran": False, "reason": "below-stage2-window", "raw_quality_score": raw_score}
+        return best
+    repaired = repair_digest(
+        bundle=bundle,
+        config=config,
+        profile=state.profile,
+        profile_scores=state.profile_scores,
+        selection=state.selection,
+        content=state.content,
+        markdown=best.markdown,
+        filename=best.filename,
+        qa=best.qa,
+    )
+    if repaired is None:
+        best.qa.setdefault("stage2", {"ran": True, "reason": "no-accepted-operator"})
+        return best
+    return CompiledDigest(
+        status="SOURCE_READY" if repaired.qa["source_ready"] else "NOT_SOURCE_READY",
+        markdown=repaired.markdown,
+        filename=repaired.filename,
+        metadata=bundle.metadata,
+        qa=repaired.qa,
+        bundle=bundle,
+    )
+
+
 def digest_files(paths: list[Path], config: DigestConfig | None = None) -> CompiledDigest:
     config = config or DigestConfig()
     owned_temp = config.work_dir is None
@@ -132,6 +191,7 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
         local_inputs = _copy_inputs(paths, temp / "inputs") if owned_temp else [Path(path).resolve() for path in paths]
         bundle = build_bundle(local_inputs, config, temp)
         best: CompiledDigest | None = None
+        best_state: _Stage1State | None = None
         for repair_pass in range(config.repair_passes):
             profile, profile_scores = choose_profile(
                 bundle,
@@ -139,7 +199,8 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
                 config=config,
                 repair_pass=repair_pass,
             )
-            content = profile.compile(bundle)
+            selection = profile.select_all(bundle)
+            content = profile.render(bundle, selection)
             markdown, filename = compile_markdown(bundle, content, config)
             qa = evaluate_digest(
                 markdown=markdown,
@@ -171,6 +232,7 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
                 return candidate
             if best is None:
                 best = candidate
+                best_state = _Stage1State(profile, profile_scores, selection, content)
             else:
                 candidate_key = (qa["quality_score"], -len(qa["errors"]), qa["checks"].get("body_words", 0))
                 best_qa = best.qa
@@ -181,9 +243,10 @@ def digest_files(paths: list[Path], config: DigestConfig | None = None) -> Compi
                 )
                 if candidate_key > best_key:
                     best = candidate
-        if best is None:
+                    best_state = _Stage1State(profile, profile_scores, selection, content)
+        if best is None or best_state is None:
             raise RuntimeError("The deterministic repair loop produced no candidate digest.")
-        return best
+        return _stage2(best, best_state, bundle, config)
     finally:
         if owned_temp:
             shutil.rmtree(temp, ignore_errors=True)

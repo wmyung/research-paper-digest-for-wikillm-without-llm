@@ -69,7 +69,7 @@ def main() -> int:
     success = not missing and not private_artifacts and all(item["returncode"] == 0 for item in command_results)
     report = {
         "success": success,
-        "version": "2.1.0",
+        "version": "2.2.0",
         "missing": missing,
         "commands": command_results,
         "private_artifacts": private_artifacts,

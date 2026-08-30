@@ -62,6 +62,8 @@ async def digest(
         "fail_on_missing_supplement",
         "source_ready_threshold",
         "enable_doi_metadata",
+        "enable_stage2",
+        "stage2_min_score",
     }
     unknown = sorted(set(raw_options) - allowed)
     if unknown:

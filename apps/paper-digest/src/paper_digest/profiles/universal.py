@@ -221,6 +221,8 @@ class UniversalProfile:
         self.profile_ranking: list[tuple[str, float]] = []
         self.coverage: dict[str, object] = {}
         self.section_capacity: dict[str, int] = {}
+        self.candidates: list[Candidate] = []
+        self.relaxed_targets: list[str] = []
 
     def score(self, bundle: ParsedBundle) -> ProfileScore:
         sections = {name for name, value in bundle.sections.items() if value.paragraphs}
@@ -261,8 +263,18 @@ class UniversalProfile:
         metadata.index_keywords = unique_preserve(keywords + fillers)[: self.config.keyword_limit]
 
     def compile(self, bundle: ParsedBundle) -> ProfileContent:
+        return self.render(bundle, self.select_all(bundle))
+
+    def select_all(self, bundle: ParsedBundle) -> dict[str, list[Candidate]]:
+        """Choose the evidence units for every target.
+
+        Kept separate from :meth:`render` so a repair stage can adjust the
+        selection and rebuild the digest, its ledgers and its retrieval
+        questions from the amended selection rather than editing prose.
+        """
         profile = self.document_profile
         candidates = build_candidates(bundle)
+        self.candidates = candidates
         scale = 1.0 + self.repair_pass * 0.18
         selected: dict[str, list[Candidate]] = {}
         taken: list[Candidate] = []
@@ -378,12 +390,19 @@ class UniversalProfile:
             )
             for target in ORDER
         }
+        self.relaxed_targets = relaxed_targets
+        return selected
+
+    def render(self, bundle: ParsedBundle, selection: dict[str, list[Candidate]]) -> ProfileContent:
+        """Build the digest, its ledgers and its questions from a selection."""
+        profile = self.document_profile
+        selected = {target: list(selection.get(target) or []) for target in ORDER}
         summary_items = selected.pop("summary", [])
         content_sections = {target: [item.text for item in items] for target, items in selected.items()}
         self.coverage = coverage_ledger(bundle, profile, content_sections)
 
         warnings: list[str] = []
-        for target in relaxed_targets:
+        for target in self.relaxed_targets:
             warnings.append(
                 f"Section '{target}' was filled from its source section without a matching cue phrase; "
                 "review its precision."

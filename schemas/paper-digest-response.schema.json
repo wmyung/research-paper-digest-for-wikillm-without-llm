@@ -49,7 +49,16 @@
     },
     "qa": {
       "type": "object",
-      "required": ["source_ready", "quality_score", "errors", "warnings", "checks", "input_inventory", "coverage"]
+      "required": [
+        "source_ready",
+        "quality_score",
+        "raw_quality_score",
+        "errors",
+        "warnings",
+        "checks",
+        "input_inventory",
+        "coverage"
+      ]
     }
   }
 }

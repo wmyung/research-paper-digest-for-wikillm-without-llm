@@ -729,13 +729,17 @@ def evaluate_digest(
         components.update(outcome.components)
         checks.setdefault("check_status", {})[outcome.name] = "fail" if outcome.errors else "pass"
 
-    score = sum(weight * components.get(key, 0.0) for key, weight in WEIGHTS.items())
-    if errors:
-        score = min(score, max(0.0, config.source_ready_threshold - 0.01))
+    # The published score is clamped so a failing record can never read as
+    # nearly certified, which also collapses every failing record onto one
+    # value. The unclamped score is reported alongside it because triage and
+    # the repair stage need a signal that still moves while errors remain.
+    raw_score = sum(weight * components.get(key, 0.0) for key, weight in WEIGHTS.items())
+    score = min(raw_score, max(0.0, config.source_ready_threshold - 0.01)) if errors else raw_score
     checks["score_components"] = components
     return {
         "source_ready": not errors and score >= config.source_ready_threshold,
         "quality_score": round(score, 4),
+        "raw_quality_score": round(raw_score, 4),
         "threshold": config.source_ready_threshold,
         "profile": profile_name,
         "document_profile": document_profile,
