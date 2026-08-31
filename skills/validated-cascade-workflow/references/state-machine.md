@@ -5,11 +5,13 @@ Recommended states:
 ```text
 DISCOVERED -> PROGRAM_RUNNING -> PROGRAM_VALID -> COMMIT_QUEUED
                            |-> REPAIR_QUEUED -> REPAIR_RUNNING -> VALIDATED
-                                                   |-> MODEL_QUEUED -> MODEL_RUNNING -> VALIDATED
+                                                   |-> MODEL_QUEUED -> MODEL_RUNNING -> MODEL_ASSESSMENT -> VALIDATED
 VALIDATED -> COMMIT_QUEUED -> COMMITTING -> READBACK_VERIFIED
 ```
 
 Destination preflight may move an item directly to `EXISTING_DESTINATION_PRESERVED` before repair or model work. Repeat the same check after the commit coordinator acquires its lock. Terminal non-success states are `EXISTING_DESTINATION_PRESERVED`, `EXCLUDED_SOURCE_DEFECT`, `HELD_EXTERNAL_DEPENDENCY`, and `FAILED_TERMINAL`.
+
+`MODEL_ASSESSMENT` consumes no new generation attempt. It records whether evidence proves an eligible expensive fallback or proves that no such fallback can help. It cannot transition to `FAILED_TERMINAL` without that artifact.
 
 Use a transactional queue. A claim returns an opaque lease token and expiry. Heartbeats extend only the matching live token. Completion requires current identity, fingerprint, stage, owner, token, and readable generation/validation evidence. Expired workers cannot publish results. A reclaimer moves expired work back to its queue and records the claim without consuming a generation attempt.
 
