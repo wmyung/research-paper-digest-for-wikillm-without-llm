@@ -22,8 +22,9 @@ Build a cost-aware recovery cascade around an existing program. The invariant is
 4. Apply deterministic repairs first: schema normalization, field completion from trusted inputs, evidence-linked reassignment, deduplication, index regeneration, and validator-directed structural repair.
 5. Revalidate after each accepted repair. Stop a repair loop that does not reduce hard failures or improve the configured monotone objective.
 6. Permit language-model fallback only for eligible residual failures. Give it allowlisted inputs, exact failed gates, an output schema, and a bounded objective. A configured model is optional; never assume a provider or model name.
-7. Parse model output as an untrusted proposal. Rebuild evidence and provenance deterministically, then run the same validator used for program output.
-8. Commit only a validated artifact. Serialize external commits, use an idempotency key derived from identity and artifact hashes, repeat the destination-preservation gate inside the commit transaction, and verify the stored result by readback.
+7. Settle model work only from readable source-gate, generation, and validator artifacts. A claim or retryable release is not a generation attempt, and no worker may declare validation, fallback admission, or terminal failure from prose alone.
+8. Parse model output as an untrusted proposal. Rebuild evidence and provenance deterministically, then run the same validator used for program output. Retry the cheaper model stage once when evidence shows a repairable validation failure; admit an expensive source fallback only when a structured gap assessment proves that the allowlisted input cannot supply the missing evidence.
+9. Commit only a validated artifact. Serialize external commits, use an idempotency key derived from identity and artifact hashes, repeat the destination-preservation gate inside the commit transaction, and verify the stored result by readback. A placeholder created by the same ingest operation may be replaced only by exact ID, while untouched and inside that same transaction; all pre-existing or progressed destination work remains protected.
 
 ## Parallel operation
 
@@ -35,4 +36,4 @@ Score alone never authorizes commit. Block on identity or hash mismatch, unsuppo
 
 ## Finish
 
-Report program passes, deterministic recoveries, model recoveries, existing-destination preservations, exclusions, holds, validated artifacts, verified commits, retries, duplicate suppressions, elapsed time, and per-stage cost. Distinguish local validation from verified destination state.
+Report program passes, deterministic recoveries, model claims, evidence-backed generation attempts, model recoveries, expensive-fallback admissions, existing-destination preservations, exclusions, holds, validated artifacts, verified commits, retries, duplicate suppressions, elapsed time, and per-stage cost. Distinguish local validation from verified destination state.
